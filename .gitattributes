@@ -1,0 +1,7 @@
+# Scripts y config que se ejecutan dentro del devcontainer (Linux): siempre LF,
+# aunque el repo se clone desde Windows con core.autocrlf=true.
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+Dockerfile text eol=lf
