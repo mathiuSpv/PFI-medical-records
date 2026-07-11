@@ -6,12 +6,16 @@ de salud sobre **Hyperledger Fabric** (control de acceso, consentimiento, audito
 
 ## Arquitectura (resumen)
 
-- **Canal público ("universal")**: todas las orgs. Solo metadatos en claro
+Orgs de ejemplo (prototipo): **Clínica San Cristóbal** (`ClinicaSanCristobalMSP`) y
+**Clínica Montenegro** (`ClinicaMontenegroMSP`), dos instituciones de salud
+intercambiando recursos entre sí sobre la misma red.
+
+- **Canal público (`canal-universal`)**: todas las orgs. Solo metadatos en claro
   (`fhir_resource_id`, `resource_type`, `ipfs_cid`, `patient_id_hash`, firma, timestamp).
   Nunca contiene payload clínico.
-- **Canal privado por org**: bitácora interna de cada institución. Único miembro de
-  aplicación: esa org. Orderer compartido.
-- **Ordering service**: Raft, compartido entre todos los canales.
+- **Canal privado por org (`canal-sancristobal`, `canal-montenegro`)**: bitácora interna
+  de cada institución. Único miembro de aplicación: esa org. Orderer compartido.
+- **Ordering service**: Raft (1 nodo en el prototipo), compartido entre los tres canales.
 - **Chaincode (Go, canal público)**: `EmitAsset`, `GrantConsent`, `RevokeConsent`,
   `CheckAccess` (ABAC, deny por defecto). `CheckAccess` con resultado PERMIT emite un
   evento de chaincode.
@@ -109,6 +113,62 @@ peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.exa
 # Query: solo lectura, se evalúa contra el state DB del peer local, no genera transacción
 peer chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
 ```
+
+## Paso 2 — Red propia (`network/`)
+
+Dos clínicas de ejemplo (`ClinicaSanCristobalMSP`, `ClinicaMontenegroMSP`) + 1 orderer
+Raft, sin canal de sistema (channel participation API, igual que la test-network desde
+Fabric 2.3+). El material criptográfico se genera con cryptogen en `network/organizations/`
+(gitignored, se regenera en cada `up`).
+
+```bash
+cd network
+
+# cryptogen (si organizations/ no existe) + docker compose up.
+./network.sh up
+
+# Genera y une los 3 canales: canal-universal (ambas clínicas), canal-sancristobal
+# y canal-montenegro (bitácora interna de cada una). Fija anchor peers.
+./network.sh createChannels
+
+# Baja los contenedores y borra organizations/ + channel-artifacts/.
+./network.sh down
+```
+
+Verificar el aislamiento de los canales privados (cada peer debe ver `canal-universal`
+más solo su propio canal privado):
+
+```bash
+. scripts/envVar.sh
+setGlobals sancristobal && peer channel list   # canal-universal, canal-sancristobal
+setGlobals montenegro   && peer channel list   # canal-universal, canal-montenegro
+```
+
+Estructura:
+
+```
+network/
+├── crypto-config/    Config de cryptogen: orderer.yaml, sancristobal.yaml, montenegro.yaml
+├── configtx/          configtx.yaml — 2 orgs + orderer Raft, 3 perfiles (1 por canal)
+├── compose/           compose-network.yaml (orderer + peer0 de cada clínica) + peercfg/core.yaml
+├── scripts/           utils.sh, envVar.sh, configUpdate.sh, createChannel.sh
+├── network.sh         up / createChannels / down
+└── organizations/, channel-artifacts/   generados en runtime, gitignored
+```
+
+Decisiones de diseño:
+
+- **Sin canal de sistema**: cada canal se crea con su propio bloque de génesis
+  (`configtxgen -profile <perfil> -outputBlock ...`) y se une al orderer vía
+  `osnadmin channel join` (channel participation API). El mismo orderer sirve a los
+  tres canales sin necesidad de un canal de sistema previo.
+- **`createChannel.sh` es genérico**: recibe `<canal> <perfil> <org...>` y hace join +
+  anchor peer para la lista de orgs que reciba — así `network.sh` lo reusa para los tres
+  canales en vez de triplicar la lógica (como hace `fabric-samples/test-network` con
+  `setAnchorPeer.sh`/`orderer.sh` fijos a `mychannel`).
+- **`CORE_VM_ENDPOINT` apunta al Docker montado en los peers** (mismo patrón que
+  test-network): el chaincode Go del Paso 3 se compila con el builder legacy de Fabric,
+  que necesita hablarle a la API de Docker desde dentro del contenedor del peer.
 
 ## Troubleshooting
 

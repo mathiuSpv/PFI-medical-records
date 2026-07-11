@@ -1,0 +1,192 @@
+---
+################################################################################
+#
+#   Organizations: orderer compartido + las dos clínicas de ejemplo.
+#   MSPDir apunta a las rutas generadas por cryptogen en ../organizations
+#   (relativo a este archivo, que es donde configtxgen fija FABRIC_CFG_PATH).
+#
+################################################################################
+Organizations:
+  - &OrdererOrg
+    Name: OrdererOrg
+    ID: OrdererMSP
+    MSPDir: ../organizations/ordererOrganizations/example.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+    OrdererEndpoints:
+      - orderer.example.com:7050
+
+  - &ClinicaSanCristobal
+    Name: ClinicaSanCristobalMSP
+    ID: ClinicaSanCristobalMSP
+    MSPDir: ../organizations/peerOrganizations/sancristobal.example.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('ClinicaSanCristobalMSP.admin', 'ClinicaSanCristobalMSP.peer', 'ClinicaSanCristobalMSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('ClinicaSanCristobalMSP.admin', 'ClinicaSanCristobalMSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('ClinicaSanCristobalMSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('ClinicaSanCristobalMSP.peer')"
+
+  - &ClinicaMontenegro
+    Name: ClinicaMontenegroMSP
+    ID: ClinicaMontenegroMSP
+    MSPDir: ../organizations/peerOrganizations/montenegro.example.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('ClinicaMontenegroMSP.admin', 'ClinicaMontenegroMSP.peer', 'ClinicaMontenegroMSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('ClinicaMontenegroMSP.admin', 'ClinicaMontenegroMSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('ClinicaMontenegroMSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('ClinicaMontenegroMSP.peer')"
+
+################################################################################
+#   Capabilities
+################################################################################
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_5: true
+
+################################################################################
+#   Application
+################################################################################
+Application: &ApplicationDefaults
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    LifecycleEndorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+    Endorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+  Capabilities:
+    <<: *ApplicationCapabilities
+
+################################################################################
+#   Orderer: Raft de un solo nodo, compartido por los tres canales.
+################################################################################
+Orderer: &OrdererDefaults
+  Addresses:
+    - orderer.example.com:7050
+  BatchTimeout: 2s
+  BatchSize:
+    MaxMessageCount: 10
+    AbsoluteMaxBytes: 99 MB
+    PreferredMaxBytes: 512 KB
+  OrdererType: etcdraft
+  EtcdRaft:
+    Consenters:
+      - Host: orderer.example.com
+        Port: 7050
+        ClientTLSCert: ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+        ServerTLSCert: ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+  Organizations:
+    - *OrdererOrg
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+  Capabilities:
+    <<: *OrdererCapabilities
+
+################################################################################
+#   Channel
+################################################################################
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+  Capabilities:
+    <<: *ChannelCapabilities
+
+################################################################################
+#   Profiles
+#
+#   Sin canal de sistema (channel participation API, como test-network desde
+#   Fabric 2.3+): cada canal se crea con su propio bloque de génesis a partir
+#   de un perfil. El orderer es el mismo en los tres; lo que cambia es qué
+#   orgs son miembros de aplicación de cada canal.
+################################################################################
+Profiles:
+  # Canal público: metadatos de activos (fhir_resource_id, cid, hash de paciente)
+  # visibles para ambas clínicas. Nunca contiene payload clínico.
+  CanalUniversal:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *ClinicaSanCristobal
+        - *ClinicaMontenegro
+
+  # Canal privado de la Clínica San Cristóbal: único miembro de aplicación es
+  # ella misma. Sirve como bitácora interna; el orderer se comparte con el
+  # resto de los canales pero Montenegro no es miembro de este.
+  CanalSanCristobal:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *ClinicaSanCristobal
+
+  # Canal privado de la Clínica Montenegro: análogo al anterior.
+  CanalMontenegro:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *ClinicaMontenegro
