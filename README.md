@@ -170,7 +170,84 @@ Decisiones de diseño:
   test-network): el chaincode Go del Paso 3 se compila con el builder legacy de Fabric,
   que necesita hablarle a la API de Docker desde dentro del contenedor del peer.
 
+## Paso 3 — Chaincode de consentimiento + ABAC (`chaincode/`)
+
+Chaincode Go (`pfi-medical-records/chaincode`, contractapi) desplegado en
+`canal-universal`. Cuatro áreas, cada una en su archivo bajo `chaincode/consent/`:
+
+- **`asset.go`** — `EmitAsset(fhirResourceID, resourceType, ipfsCid, patientIDHash)`
+  registra metadatos de un recurso ya subido a IPFS por fuera del ledger (el chaincode
+  nunca toca IPFS ni el payload clínico). `GetAsset` para leer.
+- **`consent.go`** — `GrantConsent(patientIDHash, grantedToOrg, resourceTypesJSON, expiry)`
+  otorga consentimiento con mínimo privilegio: `resourceTypesJSON` (array JSON, p.ej.
+  `["Observation"]`) no puede quedar vacío, `expiry` (RFC3339) no puede ser pasado, y una
+  org no puede otorgarse consentimiento a sí misma. `RevokeConsent(patientIDHash,
+  grantedToOrg, resourceTypesJSON)` revoca total (`[]`) o parcial, y solo la org que
+  otorgó el consentimiento puede revocarlo. Nunca se borra el estado — el historial
+  queda en el ledger (`GetConsentHistory`, vía `GetHistoryForKey`).
+- **`access.go`** — `CheckAccess(resourceType, patientIDHash)` evalúa ABAC con deny por
+  defecto: PERMIT solo si hay un `Consent` vigente (no revocado, no vencido) que cubra
+  ese `resourceType`. Cada evaluación (PERMIT o DENY) se persiste como `AccessLog`
+  (auditoría con TxID, timestamp, org, resource type, motivo) y un PERMIT además dispara
+  el evento de chaincode `AccessPermitted`, que en el paso 5 escucha la app de la org
+  dueña del recurso para entregar la clave AES envuelta.
+- **`util.go`** — normalización determinista de listas de resource types (dedup +
+  sort; la iteración de un `map` en Go no es determinista, así que nunca se persiste
+  nada cuyo orden dependa de eso).
+
+Decisión que se aparta del signature original planeado: `CheckAccess` no recibe
+`requesterOrg` como parámetro, lo toma de `ctx.GetClientIdentity().GetMSPID()` —
+si fuera un argumento cualquier org podría pasar el MSPID de otra y usar el
+resultado como oráculo de si esa org tiene o no consentimiento sobre un paciente.
+
+```bash
+cd network
+./network.sh up
+./network.sh createChannels
+./network.sh deployCC   # vendoriza, empaqueta, instala, aprueba y commitea en canal-universal
+```
+
+Prueba manual con el CLI `peer` (requiere endorsement de ambas orgs — política default
+`MAJORITY Endorsement` con 2 orgs exige a las dos —, por eso siempre `--peerAddresses`
+de ambas). Dejar ~3s entre transacciones dependientes (ver Troubleshooting):
+
+```bash
+cd network && . scripts/envVar.sh
+CHANNEL=canal-universal; CC=consent
+
+invokeBoth() {
+  peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
+    --tls --cafile "$ORDERER_CA" -C $CHANNEL -n $CC \
+    --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_SANCRISTOBAL_CA" \
+    --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_MONTENEGRO_CA" -c "$1"
+}
+
+setGlobals sancristobal
+invokeBoth '{"function":"EmitAsset","Args":["obs-001","Observation","QmCID...","hashPaciente001"]}'
+sleep 3
+EXPIRY=$(date -u -d "+1 year" +"%Y-%m-%dT%H:%M:%SZ")
+invokeBoth '{"function":"GrantConsent","Args":["hashPaciente001","ClinicaMontenegroMSP","[\"Observation\"]","'"$EXPIRY"'"]}'
+sleep 3
+
+setGlobals montenegro
+invokeBoth '{"function":"CheckAccess","Args":["Observation","hashPaciente001"]}'   # PERMIT
+```
+
 ## Troubleshooting
+
+### `MVCC_READ_CONFLICT` al encadenar transacciones de chaincode rápido
+
+Si se invoca una transacción que depende del resultado de otra (p.ej. `CheckAccess`
+justo después de `GrantConsent` sobre el mismo paciente/org) sin esperar, ambas pueden
+caer en el mismo bloque (`BatchTimeout: 2s` en `configtx.yaml`). La segunda simula
+contra el estado *antes* del commit de la primera, y al validarse el bloque su read-set
+queda desactualizado → se invalida con `MVCC_READ_CONFLICT`. No es un bug del
+chaincode: es el comportamiento normal de Fabric ante escrituras concurrentes sobre la
+misma clave. `peer chaincode invoke` no espera el commit antes de devolver el control
+(muestra "successful" apenas junta las firmas de endorsement) — por eso hace falta un
+`sleep` (o polling del evento de commit) entre transacciones dependientes al probar a
+mano. La capa de aplicación del paso 5 va a necesitar manejar esto con reintento ante
+`MVCC_READ_CONFLICT`, no asumir que un invoke exitoso ya está commiteado.
 
 ### `peer lifecycle chaincode install` falla con "broken pipe"
 

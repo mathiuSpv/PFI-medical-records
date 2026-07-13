@@ -71,11 +71,16 @@ createChannels() {
   successln "Los tres canales quedaron creados y unidos"
 }
 
+deployCC() {
+  [ -d "organizations/peerOrganizations" ] || fatalln "Correr './network.sh up' y './network.sh createChannels' primero"
+  scripts/deployChaincode.sh
+}
+
 networkDown() {
   infoln "Bajando la red y borrando material generado"
   DOCKER_SOCK="${DOCKER_SOCK}" ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_FILE} down --volumes --remove-orphans
-  rm -rf organizations channel-artifacts
-  rm -f /tmp/osnadmin.log /tmp/join.log /tmp/anchor.log
+  rm -rf organizations channel-artifacts "../chaincode/vendor"
+  rm -f /tmp/osnadmin.log /tmp/join.log /tmp/anchor.log /tmp/install.log /tmp/approve.log /tmp/commit.log
   successln "Red abajo"
 }
 
@@ -87,10 +92,13 @@ case "$COMMAND" in
   createChannels)
     createChannels
     ;;
+  deployCC)
+    deployCC
+    ;;
   down)
     networkDown
     ;;
   *)
-    fatalln "Uso: ./network.sh {up|createChannels|down}"
+    fatalln "Uso: ./network.sh {up|createChannels|deployCC|down}"
     ;;
 esac
