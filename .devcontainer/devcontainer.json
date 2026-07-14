@@ -1,0 +1,49 @@
+{
+    "name": "PFI Medical Records — Hyperledger Fabric + IPFS",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+    "features": {
+        // Docker-in-Docker: los contenedores de peers/orderer/CA/chaincode/IPFS
+        // corren DENTRO del devcontainer. No usamos el socket del host porque la
+        // test-network hace bind mounts de rutas del filesystem que solo existen
+        // dentro del devcontainer — con el Docker del host esas rutas no resuelven.
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+            // Pineado a la serie 24.x (NO "latest"): el chaincode builder legacy de
+            // Fabric 2.5 (peer -> docker API para compilar la imagen del chaincode Go)
+            // es incompatible con daemons Docker/Moby más nuevos (25+, probado roto en
+            // 29.6.1): "docker image build failed: write unix @->/var/run/docker.sock:
+            // write: broken pipe" durante 'peer lifecycle chaincode install'. Ver README.
+            "version": "24",
+            "moby": true
+        },
+        "ghcr.io/devcontainers/features/go:1": {
+            "version": "1.23"
+        },
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "lts"
+        }
+    },
+    // Instala jq, binarios de Fabric (peer, orderer, configtxgen, cryptogen,
+    // osnadmin), clona fabric-samples y descarga las imágenes Docker de Fabric.
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    "remoteUser": "vscode",
+    "remoteEnv": {
+        // Binarios de Fabric disponibles en toda sesión (VS Code, terminales, Claude Code)
+        "PATH": "${containerEnv:PATH}:/home/vscode/fabric-samples/bin",
+        // Ubicación por defecto de core.yaml/configtx.yaml de referencia
+        "FABRIC_CFG_PATH": "/home/vscode/fabric-samples/config"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "golang.go",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    },
+    // La red Fabric y el nodo IPFS exponen puertos dentro del devcontainer;
+    // estos forwards permiten tocarlos desde el host si hace falta (ej: UI de IPFS).
+    "forwardPorts": [5001, 8080],
+    "hostRequirements": {
+        "memory": "8gb"
+    }
+}
