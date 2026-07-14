@@ -1,0 +1,11 @@
+# Material criptográfico de la Clínica Montenegro (cryptogen).
+PeerOrgs:
+  - Name: Montenegro
+    Domain: montenegro.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - localhost
+    Users:
+      Count: 1

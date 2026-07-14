@@ -1,0 +1,11 @@
+# Material criptográfico del orderer compartido (cryptogen).
+# Un solo nodo Raft alcanza para el prototipo; ambas orgs firman contra este MSP
+# solo para validar bloques del ordering service, no para transacciones de aplicación.
+OrdererOrgs:
+  - Name: Orderer
+    Domain: example.com
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: orderer
+        SANS:
+          - localhost

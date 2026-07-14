@@ -10,8 +10,8 @@ las decisiones de arquitectura (cerradas) están resumidas en el [README](README
 |------|-------------|--------|
 | 0 | Devcontainer con dependencias Fabric | ✅ Completo |
 | 1 | test-network de referencia funcionando | ✅ Completo |
-| 2 | Red propia 2 orgs (clínica + laboratorio) | 🔄 En curso |
-| 3 | Chaincode Go (consentimiento + ABAC) | ⬜ Pendiente |
+| 2 | Red propia 2 orgs (Clínica San Cristóbal + Clínica Montenegro) | ✅ Completo |
+| 3 | Chaincode Go (consentimiento + ABAC) | 🔄 En curso |
 | 4 | Nodo IPFS local (Kubo) | ⬜ Pendiente |
 | 5 | Cliente de aplicación (Node.js) | ⬜ Pendiente |
 | 6 | README de estudio completo | 🔄 Continuo (se actualiza en cada paso) |
@@ -49,12 +49,27 @@ moby-engine=24.0.9-ubuntu22.04u2` + reinicio de `dockerd`.
 
 ## Paso 2 — Red propia (`network/`)
 
-- [ ] Material criptográfico para ClinicaMSP y LaboratorioMSP (cryptogen primero; CA real después si da el tiempo)
-- [ ] `configtx.yaml` propio: 2 orgs + orderer Raft compartido, perfiles para cada canal
-- [ ] `docker-compose` con: orderer, peer0.clinica, peer0.laboratorio
-- [ ] Canal público `canal-universal` (ambas orgs)
-- [ ] Canal privado `canal-clinica` (solo clínica como miembro de aplicación + orderer compartido)
-- [ ] Scripts de levantado/bajado documentados
+Orgs de ejemplo: **Clínica San Cristóbal** (`ClinicaSanCristobalMSP`) y **Clínica
+Montenegro** (`ClinicaMontenegroMSP`) — dos instituciones de salud intercambiando
+recursos entre sí (en vez del par clínica/laboratorio previsto originalmente; el
+diseño de canales es el mismo, generalizado a "canal privado por org").
+
+- [x] Material criptográfico con cryptogen: `network/crypto-config/{orderer,sancristobal,montenegro}.yaml`
+- [x] `network/configtx/configtx.yaml`: 2 orgs + orderer Raft compartido (1 nodo), sin
+      canal de sistema (channel participation API), 3 perfiles — uno por canal
+- [x] `network/compose/compose-network.yaml`: orderer + peer0.sancristobal + peer0.montenegro
+      (Docker-in-Docker montado en los peers para el chaincode builder legacy, mismo
+      patrón que test-network)
+- [x] Canal público `canal-universal` (ambas orgs como miembros de aplicación)
+- [x] Canal privado `canal-sancristobal` (solo ClinicaSanCristobalMSP) y
+      `canal-montenegro` (solo ClinicaMontenegroMSP) — bitácora interna por org,
+      orderer compartido con el resto de los canales
+- [x] `network/network.sh {up|createChannels|down}` — probado punta a punta: los 3
+      canales quedan creados y unidos, `peer channel list` confirma que cada peer
+      solo ve `canal-universal` + su propio canal privado (aislamiento correcto)
+
+Nota: `network/network.sh` no incluye deploy de chaincode (eso es el Paso 3, sobre
+`canal-universal` — ver abajo).
 
 ## Paso 3 — Chaincode Go (`chaincode/`)
 

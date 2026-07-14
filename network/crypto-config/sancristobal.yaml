@@ -1,0 +1,11 @@
+# Material criptográfico de la Clínica San Cristóbal (cryptogen).
+PeerOrgs:
+  - Name: SanCristobal
+    Domain: sancristobal.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - localhost
+    Users:
+      Count: 1
