@@ -11,8 +11,8 @@ las decisiones de arquitectura (cerradas) están resumidas en el [README](README
 | 0 | Devcontainer con dependencias Fabric | ✅ Completo |
 | 1 | test-network de referencia funcionando | ✅ Completo |
 | 2 | Red propia 2 orgs (Clínica San Cristóbal + Clínica Montenegro) | ✅ Completo |
-| 3 | Chaincode Go (consentimiento + ABAC) | 🔄 En curso |
-| 4 | Nodo IPFS local (Kubo) | ⬜ Pendiente |
+| 3 | Chaincode Go (consentimiento + ABAC) | ✅ Completo |
+| 4 | Nodo IPFS local (Kubo) | 🔄 En curso |
 | 5 | Cliente de aplicación (Node.js) | ⬜ Pendiente |
 | 6 | README de estudio completo | 🔄 Continuo (se actualiza en cada paso) |
 
@@ -68,18 +68,27 @@ diseño de canales es el mismo, generalizado a "canal privado por org").
       canales quedan creados y unidos, `peer channel list` confirma que cada peer
       solo ve `canal-universal` + su propio canal privado (aislamiento correcto)
 
-Nota: `network/network.sh` no incluye deploy de chaincode (eso es el Paso 3, sobre
-`canal-universal` — ver abajo).
-
 ## Paso 3 — Chaincode Go (`chaincode/`)
 
-- [ ] `EmitAsset(fhir_resource_id, resource_type, ipfs_cid, patient_id_hash)` — registra metadatos; NO toca IPFS
-- [ ] `GrantConsent(patient_id_hash, org, resource_types[], expiry)` — deny por defecto, mínimo privilegio
-- [ ] `RevokeConsent` — total o parcial, historial inmutable
-- [ ] `CheckAccess(requester_org, resource_type, patient_id_hash)` — ABAC: consentimiento vigente + scope + expiry; registra PERMIT/DENY en ledger (auditoría con tx_id, timestamp, requester_org, resource_type)
-- [ ] Evento de chaincode ante PERMIT (para que la app emisora dispare entrega de clave)
-- [ ] Restricción: determinista, sin llamadas de red, solo ChaincodeStub
-- [ ] Desplegado en `canal-universal`, probado con CLI `peer`
+- [x] `EmitAsset(fhirResourceID, resourceType, ipfsCid, patientIDHash)` — registra metadatos; NO toca IPFS
+- [x] `GrantConsent(patientIDHash, grantedToOrg, resourceTypesJSON, expiry)` — deny por defecto, mínimo privilegio (resourceTypes no puede quedar vacío, expiry no puede ser pasado, una org no puede otorgarse consentimiento a sí misma)
+- [x] `RevokeConsent(patientIDHash, grantedToOrg, resourceTypesJSON)` — total (`[]`) o parcial; solo la org que otorgó puede revocar; historial inmutable vía `GetHistoryForKey` (expuesto en `GetConsentHistory`, probado: grant + revoke quedan como versiones separadas)
+- [x] `CheckAccess(resourceType, patientIDHash)` — ABAC: consentimiento vigente + scope + expiry; registra PERMIT/DENY en ledger (auditoría con TxID, timestamp, requesterOrg, resourceType, reason) vía `GetAccessLog`
+- [x] Evento de chaincode `AccessPermitted` ante PERMIT (para que la app emisora dispare entrega de clave — paso 5)
+- [x] Restricción: determinista (timestamp vía `ctx.GetStub().GetTxTimestamp()`, nunca `time.Now()`; listas siempre dedupeadas+ordenadas antes de persistir), sin llamadas de red, solo `ChaincodeStub`/`ClientIdentity`
+- [x] Desplegado en `canal-universal` vía `network/network.sh deployCC` (nuevo comando), probado con CLI `peer`: flujo completo emit → deny sin consentimiento → grant → permit → deny por resource type no autorizado → revocación parcial → intento de revocar por la org no otorgante (rechazado) → revocación total → deny final → historial con las 2 versiones
+
+Desvío deliberado del checklist original: `CheckAccess` no recibe `requester_org` como
+argumento — se toma de `ctx.GetClientIdentity().GetMSPID()` (la identidad que firma la
+tx). Si fuera un parámetro, cualquier org podría pasar el MSPID de otra y usar el
+resultado/evento como oráculo de si esa otra org tiene consentimiento o no. El resto de
+la firma sigue el plan original.
+
+Bug encontrado y corregido durante las pruebas: `RevokeConsent` total dejaba
+`ResourceTypes = nil`, que serializa a JSON `null`; el schema autogenerado por
+`contractapi` para el valor de retorno de `GetConsent` exige `array` y rechazaba `null`
+con `endorsement failure ... Invalid type. Expected: array, given: null`. Fix: usar
+`[]string{}` en vez de `nil`.
 
 ## Paso 4 — IPFS local (`docker-compose` en `network/` o propio)
 
