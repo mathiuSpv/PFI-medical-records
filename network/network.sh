@@ -6,6 +6,8 @@
 #   ./network.sh createChannels  crea canal-universal, canal-sancristobal y
 #                                 canal-montenegro (requiere 'up' previo)
 #   ./network.sh down            baja todo y borra material generado
+#   ./network.sh ipfsUp          levanta el nodo IPFS local (Kubo), API en :5001
+#   ./network.sh ipfsDown        baja el nodo IPFS y borra su volumen
 #
 # Requiere el devcontainer del proyecto (peer/configtxgen/cryptogen/osnadmin
 # en el PATH, Docker-in-Docker activo). Ver README para detalles.
@@ -24,6 +26,7 @@ else
   : "${CONTAINER_CLI_COMPOSE:=${CONTAINER_CLI} compose}"
 fi
 COMPOSE_FILE="compose/compose-network.yaml"
+COMPOSE_IPFS_FILE="compose/compose-ipfs.yaml"
 
 # DOCKER_SOCK: mismo mecanismo que fabric-samples/test-network para resolver
 # el socket real del contexto docker activo (relevante si no es el default).
@@ -76,6 +79,26 @@ deployCC() {
   scripts/deployChaincode.sh
 }
 
+ipfsUp() {
+  infoln "Levantando nodo IPFS (Kubo)"
+  ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_IPFS_FILE} up -d
+  infoln "Esperando a que la API responda en :5001"
+  for i in $(seq 1 30); do
+    if curl -fsS -X POST http://127.0.0.1:5001/api/v0/version > /dev/null 2>&1; then
+      successln "IPFS arriba: $(curl -fsS -X POST http://127.0.0.1:5001/api/v0/version)"
+      return
+    fi
+    sleep 1
+  done
+  fatalln "La API de IPFS no respondió en :5001 tras 30s"
+}
+
+ipfsDown() {
+  infoln "Bajando el nodo IPFS"
+  ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_IPFS_FILE} down --volumes
+  successln "IPFS abajo"
+}
+
 networkDown() {
   infoln "Bajando la red y borrando material generado"
   DOCKER_SOCK="${DOCKER_SOCK}" ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_FILE} down --volumes --remove-orphans
@@ -98,7 +121,13 @@ case "$COMMAND" in
   down)
     networkDown
     ;;
+  ipfsUp)
+    ipfsUp
+    ;;
+  ipfsDown)
+    ipfsDown
+    ;;
   *)
-    fatalln "Uso: ./network.sh {up|createChannels|deployCC|down}"
+    fatalln "Uso: ./network.sh {up|createChannels|deployCC|down|ipfsUp|ipfsDown}"
     ;;
 esac

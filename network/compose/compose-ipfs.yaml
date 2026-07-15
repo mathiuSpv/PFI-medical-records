@@ -1,0 +1,17 @@
+# Nodo IPFS local (Kubo), un solo nodo, para el payload clínico cifrado.
+# Independiente de la red Fabric (compose-network.yaml): no necesitan
+# compartir red docker, la capa de aplicación (paso 5) les habla a los dos
+# por localhost usando los puertos publicados.
+
+volumes:
+  ipfs_data:
+
+services:
+  ipfs:
+    container_name: ipfs
+    image: ipfs/kubo:latest
+    ports:
+      - "5001:5001" # API HTTP (RPC) — usada por la capa de aplicación
+      - "8080:8080" # Gateway HTTP de solo lectura (cat por URL, debug)
+    volumes:
+      - ipfs_data:/data/ipfs
