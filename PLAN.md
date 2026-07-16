@@ -12,8 +12,8 @@ las decisiones de arquitectura (cerradas) están resumidas en el [README](README
 | 1 | test-network de referencia funcionando | ✅ Completo |
 | 2 | Red propia 2 orgs (Clínica San Cristóbal + Clínica Montenegro) | ✅ Completo |
 | 3 | Chaincode Go (consentimiento + ABAC) | ✅ Completo |
-| 4 | Nodo IPFS local (Kubo) | 🔄 En curso |
-| 5 | Cliente de aplicación (Node.js) | ⬜ Pendiente |
+| 4 | Nodo IPFS local (Kubo) | ✅ Completo |
+| 5 | Cliente de aplicación (Node.js) | 🔄 En curso |
 | 6 | README de estudio completo | 🔄 Continuo (se actualiza en cada paso) |
 
 ## Paso 0 — Devcontainer
@@ -92,8 +92,16 @@ con `endorsement failure ... Invalid type. Expected: array, given: null`. Fix: u
 
 ## Paso 4 — IPFS local (`docker-compose` en `network/` o propio)
 
-- [ ] Kubo en Docker, un solo nodo, API en :5001
-- [ ] Verificar add/cat por API
+- [x] Kubo en Docker, un solo nodo (`network/compose/compose-ipfs.yaml`), API en :5001,
+      gateway HTTP en :8080. Comandos `network/network.sh {ipfsUp|ipfsDown}` — `ipfsUp`
+      espera activamente a que la API responda antes de devolver el control
+- [x] Verificar add/cat por API: `POST /api/v0/add` (multipart) y `POST /api/v0/cat?arg=<CID>`
+      probados con un archivo de prueba — contenido recuperado idéntico al original,
+      también confirmado por el gateway (`GET :8080/ipfs/<CID>`)
+
+Sin red compartida con `network/compose/compose-network.yaml` a propósito: la capa de
+aplicación (paso 5) le habla a Fabric y a IPFS por `localhost` con los puertos
+publicados, no hace falta que los contenedores se vean entre sí por la red docker.
 
 ## Paso 5 — Cliente de aplicación (`application/`)
 

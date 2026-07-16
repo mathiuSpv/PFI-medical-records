@@ -233,6 +233,34 @@ setGlobals montenegro
 invokeBoth '{"function":"CheckAccess","Args":["Observation","hashPaciente001"]}'   # PERMIT
 ```
 
+## Paso 4 — Nodo IPFS local (`network/compose/compose-ipfs.yaml`)
+
+Kubo (implementación de referencia de IPFS) de un solo nodo, para el payload clínico
+cifrado — el chaincode solo guarda el CID, nunca el contenido. Compose independiente de
+la red Fabric: la capa de aplicación (paso 5) le habla a los dos por `localhost` con los
+puertos publicados, no necesitan compartir red docker.
+
+```bash
+cd network
+./network.sh ipfsUp     # docker compose up -d + espera activa a que la API responda
+./network.sh ipfsDown   # baja el contenedor y borra su volumen
+```
+
+Verificación manual por la API HTTP (`:5001`, RPC estilo `POST /api/v0/<comando>`) y el
+gateway de solo lectura (`:8080`):
+
+```bash
+echo "contenido de prueba" > /tmp/test.txt
+
+# add: sube el archivo, devuelve el CID
+CID=$(curl -fsS -X POST -F "file=@/tmp/test.txt" "http://127.0.0.1:5001/api/v0/add" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['Hash'])")
+
+# cat: recupera el contenido por CID (API RPC o gateway HTTP)
+curl -fsS -X POST "http://127.0.0.1:5001/api/v0/cat?arg=$CID"
+curl -fsS "http://127.0.0.1:8080/ipfs/$CID"
+```
+
 ## Troubleshooting
 
 ### `MVCC_READ_CONFLICT` al encadenar transacciones de chaincode rápido
