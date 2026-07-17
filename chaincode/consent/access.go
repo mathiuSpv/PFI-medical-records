@@ -2,6 +2,7 @@ package consent
 
 import (
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"time"
 
@@ -32,6 +33,13 @@ type AccessLog struct {
 	PatientIDHash string `json:"PatientIDHash"`
 	Decision      string `json:"Decision"`
 	Reason        string `json:"Reason"`
+	// RequesterCertPEM es el certificado X.509 (PEM) de quien firmó la tx,
+	// tal como lo ve el chaincode vía ctx.GetClientIdentity() — determinista,
+	// no es una llamada de red. Va también en el evento PERMIT para que la
+	// app de la org dueña del recurso pueda envolver la clave AES para el
+	// solicitante sin tener que salir a buscar su certificado a otro lado
+	// (paso 5).
+	RequesterCertPEM string `json:"RequesterCertPEM"`
 }
 
 func accessLogKey(txID string) string {
@@ -58,6 +66,12 @@ func (s *SmartContract) CheckAccess(ctx contractapi.TransactionContextInterface,
 	if err != nil {
 		return "", fmt.Errorf("no se pudo determinar la organización solicitante: %v", err)
 	}
+
+	requesterCert, err := ctx.GetClientIdentity().GetX509Certificate()
+	if err != nil {
+		return "", fmt.Errorf("no se pudo obtener el certificado del solicitante: %v", err)
+	}
+	requesterCertPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: requesterCert.Raw}))
 
 	txTimestamp, err := ctx.GetStub().GetTxTimestamp()
 	if err != nil {
@@ -98,13 +112,14 @@ func (s *SmartContract) CheckAccess(ctx contractapi.TransactionContextInterface,
 	}
 
 	logEntry := AccessLog{
-		TxID:          ctx.GetStub().GetTxID(),
-		Timestamp:     now.UTC().Format(time.RFC3339),
-		RequesterOrg:  requesterOrg,
-		ResourceType:  resourceType,
-		PatientIDHash: patientIDHash,
-		Decision:      decision,
-		Reason:        reason,
+		TxID:             ctx.GetStub().GetTxID(),
+		Timestamp:        now.UTC().Format(time.RFC3339),
+		RequesterOrg:     requesterOrg,
+		ResourceType:     resourceType,
+		PatientIDHash:    patientIDHash,
+		Decision:         decision,
+		Reason:           reason,
+		RequesterCertPEM: requesterCertPEM,
 	}
 	logJSON, err := json.Marshal(logEntry)
 	if err != nil {

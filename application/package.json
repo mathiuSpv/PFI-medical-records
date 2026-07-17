@@ -1,0 +1,18 @@
+{
+  "name": "pfi-application",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cliente de aplicación (paso 5): cifrado AES-256-GCM, subida/descarga IPFS, invocaciones al chaincode de consentimiento y listener de eventos por org.",
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "demo": "node src/demo.js",
+    "listen": "node src/listen.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.0",
+    "@hyperledger/fabric-gateway": "^1.10.0"
+  }
+}
