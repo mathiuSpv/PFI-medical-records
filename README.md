@@ -333,6 +333,50 @@ lógica de lectura del stream con `demo.js` (`src/events.js`) — la única dife
 qué hace con cada evento (`demo.js` intenta envolver una clave si tiene el recurso en su
 `keyStore` en memoria; `listen.js` solo imprime el payload).
 
+## Dashboard web (`application/server` + `application/web`)
+
+UI React interactiva para ver el funcionamiento de los nodos y ejecutar los
+intercambios desde el navegador, actuando como cualquiera de las dos clínicas.
+Arquitectura: el navegador no puede hablar gRPC con los peers (`fabric-gateway` es
+Node-only), así que un **BFF Express** (`application/server`, puerto 3001) reutiliza los
+módulos del paso 5 (`src/connect|crypto|ipfs|events`) y expone REST + SSE; el frontend
+(`application/web`, Vite + React, puerto 5173) le pega vía proxy `/api`.
+
+```bash
+# 1. Infraestructura (si no está arriba)
+cd network && ./network.sh up && ./network.sh createChannels && ./network.sh deployCC && ./network.sh ipfsUp
+
+# 2. BFF (terminal 1)
+cd application && npm install && npm run server
+
+# 3. Frontend (terminal 2)
+cd application/web && npm install && npm run dev
+# → http://localhost:5173
+```
+
+Qué muestra:
+
+- **Topología**: orderer, peer de cada clínica y nodo IPFS con su estado (healthz), y
+  los 3 canales con su altura de bloque (qscc `GetChainInfo`). La vista de canales
+  depende de la org activa: el canal privado ajeno aparece "sin acceso 🔒" porque el
+  peer de esa org no es miembro — el aislamiento del diseño, visible.
+- **Acciones** (como la org activa): emitir activo (cifra AES-256-GCM → IPFS →
+  `EmitAsset`), otorgar/revocar consentimiento (parcial o total), pedir acceso
+  (`CheckAccess` on-chain) con el PERMIT/DENY y su motivo en grande.
+- **Tablas**: activos emitidos, consentimientos (con historial de versiones del ledger
+  expandible) y auditoría completa de accesos. Usan las queries `GetAllAssets`,
+  `GetAllConsents` y `GetAllAccessLogs` agregadas al chaincode para este dashboard.
+- **Eventos en vivo** (SSE): cada `AccessPermitted` y cada entrega de clave que el BFF
+  envuelve automáticamente al verlo (mismo flujo del paso 5). Cada entrega tiene el
+  sobre ECIES colapsable y un botón "Descifrar como <org destinataria>" que desenvuelve
+  la clave, baja el blob de IPFS y muestra el recurso FHIR en claro — el círculo
+  completo en pantalla.
+
+Limitaciones (prototipo, iguales al paso 5): el BFF tiene las identidades de ambas orgs
+(solo entorno dev — en despliegue real cada org corre su propia instancia); el keystore
+de claves AES y las entregas viven en memoria del server (se pierden al reiniciarlo;
+los metadatos on-chain e IPFS persisten); tablas sin paginación.
+
 ## Troubleshooting
 
 ### `MVCC_READ_CONFLICT` al encadenar transacciones de chaincode rápido
@@ -406,10 +450,12 @@ idempotente salvo por el append a `.bashrc`, que ya está guardado con un check)
 ## Estructura del proyecto (se completa por etapas)
 
 ```
-.devcontainer/   Entorno de desarrollo reproducible (paso 0)
-network/         Red Fabric propia: configtx.yaml, docker-compose, scripts (paso 2)
-chaincode/       Chaincode Go: consentimiento + ABAC + auditoría (paso 3)
-application/     Cliente por org: cifrado, IPFS, eventos, entrega de clave (paso 5)
+.devcontainer/       Entorno de desarrollo reproducible (paso 0)
+network/             Red Fabric propia: configtx.yaml, docker-compose, scripts (paso 2)
+chaincode/           Chaincode Go: consentimiento + ABAC + auditoría (paso 3)
+application/src/     Cliente por org: cifrado, IPFS, eventos, entrega de clave (paso 5)
+application/server/  BFF Express del dashboard: REST + SSE sobre los módulos de src/
+application/web/     Dashboard React (Vite): topología, acciones, tablas, feed en vivo
 ```
 
 ## Glosario mínimo para la defensa

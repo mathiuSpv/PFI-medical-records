@@ -42,8 +42,10 @@ type AccessLog struct {
 	RequesterCertPEM string `json:"RequesterCertPEM"`
 }
 
+const accessLogKeyPrefix = "ACCESSLOG_"
+
 func accessLogKey(txID string) string {
-	return "ACCESSLOG_" + txID
+	return accessLogKeyPrefix + txID
 }
 
 // CheckAccess evalúa ABAC con deny por defecto: la organización que somete la
@@ -154,4 +156,10 @@ func (s *SmartContract) GetAccessLog(ctx contractapi.TransactionContextInterface
 		return nil, err
 	}
 	return &logEntry, nil
+}
+
+// GetAllAccessLogs devuelve toda la auditoría de accesos (PERMIT y DENY).
+// Query de solo lectura.
+func (s *SmartContract) GetAllAccessLogs(ctx contractapi.TransactionContextInterface) ([]*AccessLog, error) {
+	return getAllByPrefix[AccessLog](ctx, accessLogKeyPrefix)
 }

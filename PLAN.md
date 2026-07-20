@@ -15,6 +15,7 @@ las decisiones de arquitectura (cerradas) están resumidas en el [README](README
 | 4 | Nodo IPFS local (Kubo) | ✅ Completo |
 | 5 | Cliente de aplicación (Node.js) | ✅ Completo |
 | 6 | README de estudio completo | 🔄 Continuo (se actualiza en cada paso) |
+| Extra | Dashboard web (React + BFF Express) | ✅ Completo |
 
 ## Paso 0 — Devcontainer
 
@@ -145,6 +146,35 @@ Decisiones no explícitas en el checklist original:
   en el paso 3), el SDK Gateway resuelve el endorsement cross-org automáticamente vía el
   servicio de discovery del peer conectado (usa los anchor peers configurados en el
   paso 2) — alcanza con conectarse al peer de la propia org.
+
+## Extra — Dashboard web (`application/server` + `application/web`)
+
+UI React interactiva para la demo: ver los nodos y operar los intercambios desde el
+navegador actuando como cualquiera de las dos clínicas. Post-etapa-1 (no estaba en el
+plan original).
+
+- [x] Chaincode: queries de listado `GetAllAssets` / `GetAllConsents` / `GetAllAccessLogs`
+      (range query por prefijo con helper genérico en `util.go`; slices siempre
+      inicializados — mismo cuidado del bug `null` vs `array` del paso 3). Y
+      `deployChaincode.sh` acepta `CC_VERSION`/`CC_SEQUENCE` por env para upgrades.
+- [x] BFF Express (`application/server`, :3001): REST + SSE sobre los módulos del paso 5.
+      Gateways lazy por org, listener de eventos al boot (reintenta si la red no está),
+      keyStore/deliveries en memoria, envoltura automática de clave ante cada PERMIT.
+      `CheckAccess` vía `submitAsync` para capturar el txId y devolver también el motivo
+      (leyendo el `AccessLog` de esa tx tras el commit).
+- [x] Estado de nodos por los endpoints de operaciones (`/healthz` de orderer y peers,
+      `/api/v0/version` de IPFS) y altura de canales vía qscc `GetChainInfo` decodificado
+      con `@hyperledger/fabric-protos`. El canal privado ajeno responde error en el peer
+      → se reporta "sin acceso" (el aislamiento, demostrable en la UI).
+- [x] Frontend (`application/web`, Vite + React, :5173, proxy `/api`): topología SVG con
+      estado y canales, panel de acciones por org (emitir/consentir/revocar/pedir acceso),
+      tablas (activos, consentimientos con historial expandible, auditoría) y feed SSE
+      con descifrado del recurso por la org destinataria. Sin frameworks de UI ni estado
+      (solo React + fetch + EventSource), CSS propio.
+- [x] `forwardPorts` 3001 y 5173 en devcontainer.json; README con sección propia.
+- [x] Verificado end-to-end por REST (emit → DENY → grant → PERMIT → delivery automática
+      → decrypt como destinataria / rechazo a la org equivocada → revoke → DENY) y
+      `npm run demo` del paso 5 sigue verde con el chaincode extendido.
 
 ## Fuera de alcance (etapa 1)
 
