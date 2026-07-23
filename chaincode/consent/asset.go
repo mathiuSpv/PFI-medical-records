@@ -44,9 +44,12 @@ func (s *SmartContract) EmitAsset(ctx contractapi.TransactionContextInterface, f
 		return fmt.Errorf("el activo %s ya fue emitido", fhirResourceID)
 	}
 
-	ownerOrg, err := ctx.GetClientIdentity().GetMSPID()
+	// Solo una clínica habilitada puede emitir: una institución dada de baja no
+	// debería poder seguir publicando activos en el bus aunque su peer siga en
+	// pie hasta que se aplique la baja de membresía.
+	ownerOrg, err := requireActiveCaller(ctx)
 	if err != nil {
-		return fmt.Errorf("no se pudo determinar la organización emisora: %v", err)
+		return err
 	}
 
 	txTimestamp, err := ctx.GetStub().GetTxTimestamp()

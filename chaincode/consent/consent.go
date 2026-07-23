@@ -68,12 +68,22 @@ func (s *SmartContract) GrantConsent(ctx contractapi.TransactionContextInterface
 		return fmt.Errorf("expiry debe ser posterior al momento del otorgamiento")
 	}
 
-	grantorOrg, err := ctx.GetClientIdentity().GetMSPID()
+	// Ambos extremos tienen que ser clínicas habilitadas en el bus: otorgar
+	// acceso a una institución dada de baja dejaría un consentimiento vigente
+	// apuntando a alguien que ya no debería poder pedir nada.
+	grantorOrg, err := requireActiveCaller(ctx)
 	if err != nil {
-		return fmt.Errorf("no se pudo determinar la organización otorgante: %v", err)
+		return err
 	}
 	if grantorOrg == grantedToOrg {
 		return fmt.Errorf("una organización no puede otorgarse consentimiento a sí misma")
+	}
+	grantedActiva, err := isClinicActive(ctx, grantedToOrg)
+	if err != nil {
+		return err
+	}
+	if !grantedActiva {
+		return fmt.Errorf("no se puede otorgar consentimiento a %s: no está registrada como clínica activa", grantedToOrg)
 	}
 
 	key := consentKey(patientIDHash, grantedToOrg)

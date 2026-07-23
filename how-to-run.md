@@ -65,6 +65,22 @@ El flujo completo también corre por consola:
 cd application && npm install && npm run demo
 ```
 
+## 4b. Incorporar o sacar instituciones
+
+Desde el dashboard, panel **Instituciones del bus**, o por consola:
+
+```bash
+cd network
+./network.sh clinics                                  # listado y estado
+./network.sh addClinic rosario "Hospital Rosario"     # alta   (~40 s)
+./network.sh removeClinic rosario "fin de convenio"   # baja   (~20 s)
+```
+
+El alta crea una organización Fabric real (MSP y peer propios) y la incorpora a
+`canal-universal` con una actualización de config firmada por las clínicas existentes;
+la baja hace el camino inverso. El detalle de cada paso está en el
+[README § Alta y baja de instituciones](README.md#alta-y-baja-de-instituciones).
+
 ## 5. Bajar todo
 
 ```bash
@@ -88,3 +104,10 @@ on-chain e IPFS persisten mientras la red siga arriba).
 - **`MVCC_READ_CONFLICT` probando con el CLI `peer`** → esperar ~3 s entre transacciones
   dependientes (explicado en README § Troubleshooting; el SDK y el dashboard no lo
   sufren).
+- **`go list` falla con "error obtaining VCS status" al hacer `deployCC`** → git no
+  confía en el repo porque el bind mount lo deja con otro dueño (pasa clonando en
+  Windows). Dentro del contenedor:
+  `git config --global --add safe.directory /workspaces/pfi-medical-records`.
+- **Editás el front y el navegador no cambia** → sobre bind mounts de Windows el watcher
+  de Vite no recibe los eventos de inotify. Reiniciar `npm run dev`, o agregar
+  `server: { watch: { usePolling: true } }` en `web/vite.config.js`.

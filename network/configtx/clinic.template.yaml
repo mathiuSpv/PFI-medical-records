@@ -1,0 +1,137 @@
+---
+# Plantilla de configtx para una clínica dada de alta en caliente.
+# scripts/addOrg.sh la renderiza en configtx/generated/<key>/configtx.yaml y la
+# usa para dos cosas distintas:
+#
+#   1. `configtxgen -printOrg __MSPID__` -> definición JSON de la org, que se
+#      inyecta en el config de canal-universal (el alta real de la membresía).
+#   2. `configtxgen -profile __CHANNEL_PROFILE__ -outputBlock ...` -> bloque de
+#      génesis de su canal privado (bitácora interna, único miembro ella misma).
+#
+# Las rutas son ABSOLUTAS a propósito: este archivo vive en un subdirectorio
+# generado, y con rutas relativas cualquier cambio de profundidad rompería el
+# MSPDir de forma silenciosa (configtxgen falla recién al leer los certs).
+
+Organizations:
+  - &OrdererOrg
+    Name: OrdererOrg
+    ID: OrdererMSP
+    MSPDir: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+    OrdererEndpoints:
+      - orderer.example.com:7050
+
+  - &NuevaClinica
+    Name: __MSPID__
+    ID: __MSPID__
+    MSPDir: __NETWORK_HOME__/organizations/peerOrganizations/__DOMAIN__/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('__MSPID__.admin', '__MSPID__.peer', '__MSPID__.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('__MSPID__.admin', '__MSPID__.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('__MSPID__.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('__MSPID__.peer')"
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_5: true
+
+Application: &ApplicationDefaults
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    LifecycleEndorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+    Endorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+  Capabilities:
+    <<: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+  Addresses:
+    - orderer.example.com:7050
+  BatchTimeout: 2s
+  BatchSize:
+    MaxMessageCount: 10
+    AbsoluteMaxBytes: 99 MB
+    PreferredMaxBytes: 512 KB
+  OrdererType: etcdraft
+  EtcdRaft:
+    Consenters:
+      - Host: orderer.example.com
+        Port: 7050
+        ClientTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+        ServerTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+  Organizations:
+    - *OrdererOrg
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+  Capabilities:
+    <<: *OrdererCapabilities
+
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+  Capabilities:
+    <<: *ChannelCapabilities
+
+Profiles:
+  # Canal privado de la clínica nueva: bitácora interna, único miembro de
+  # aplicación ella misma, mismo orderer que el resto.
+  __CHANNEL_PROFILE__:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *NuevaClinica

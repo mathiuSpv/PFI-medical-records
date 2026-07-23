@@ -1,16 +1,17 @@
 // Listener de eventos de chaincode standalone, por org — corre en su propia
 // terminal y se queda escuchando AccessPermitted en canal-universal hasta
-// Ctrl+C. Uso: node src/listen.js <sancristobal|montenegro>
+// Ctrl+C. Uso: node src/listen.js <key de clínica>
 'use strict';
 
 const { newGatewayForOrg } = require('./connect');
 const { listenForEvents } = require('./events');
-const { CHANNEL_NAME } = require('./config');
+const { CHANNEL_NAME, getOrgs } = require('./config');
 
 async function main() {
   const orgKey = process.argv[2];
-  if (orgKey !== 'sancristobal' && orgKey !== 'montenegro') {
-    console.error('Uso: node src/listen.js <sancristobal|montenegro>');
+  const disponibles = Object.keys(getOrgs());
+  if (!disponibles.includes(orgKey)) {
+    console.error(`Uso: node src/listen.js <${disponibles.join('|')}>`);
     process.exitCode = 1;
     return;
   }

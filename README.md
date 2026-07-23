@@ -8,9 +8,11 @@ de salud sobre **Hyperledger Fabric** (control de acceso, consentimiento, audito
 
 ## Arquitectura (resumen)
 
-Orgs de ejemplo (prototipo): **Clínica San Cristóbal** (`ClinicaSanCristobalMSP`) y
+Orgs fundadoras (prototipo): **Clínica San Cristóbal** (`ClinicaSanCristobalMSP`) y
 **Clínica Montenegro** (`ClinicaMontenegroMSP`), dos instituciones de salud
-intercambiando recursos entre sí sobre la misma red.
+intercambiando recursos entre sí sobre la misma red. No son las únicas posibles: se
+pueden incorporar y sacar instituciones con la red andando — ver
+[Alta y baja de instituciones](#alta-y-baja-de-instituciones).
 
 - **Canal público (`canal-universal`)**: todas las orgs. Solo metadatos en claro
   (`fhir_resource_id`, `resource_type`, `ipfs_cid`, `patient_id_hash`, firma, timestamp).
@@ -374,10 +376,82 @@ Qué muestra:
   la clave, baja el blob de IPFS y muestra el recurso FHIR en claro — el círculo
   completo en pantalla.
 
-Limitaciones (prototipo, iguales al paso 5): el BFF tiene las identidades de ambas orgs
-(solo entorno dev — en despliegue real cada org corre su propia instancia); el keystore
-de claves AES y las entregas viven en memoria del server (se pierden al reiniciarlo;
-los metadatos on-chain e IPFS persisten); tablas sin paginación.
+Limitaciones (prototipo, iguales al paso 5): el BFF tiene las identidades de todas las
+orgs (solo entorno dev — en despliegue real cada org corre su propia instancia); el
+keystore de claves AES y las entregas viven en memoria del server (se pierden al
+reiniciarlo; los metadatos on-chain e IPFS persisten); tablas sin paginación.
+
+## Alta y baja de instituciones
+
+La red dejó de ser de dos clínicas fijas: se pueden incorporar y sacar instituciones con
+la red andando. **No es un alta simulada** — cada alta crea una organización Fabric real
+(MSP y peer propios) y la incorpora a `canal-universal` con una actualización de
+configuración de canal firmada por las clínicas que ya estaban.
+
+```bash
+cd network
+./network.sh clinics                                  # listado y estado
+./network.sh addClinic rosario "Hospital Rosario"     # alta   (~40 s)
+./network.sh removeClinic rosario "fin de convenio"   # baja   (~20 s)
+```
+
+También desde el dashboard, en el panel **Instituciones del bus** (el BFF corre estos
+mismos scripts y transmite el progreso por SSE mientras tardan).
+
+### Qué hace un alta
+
+1. `cryptogen` genera el MSP y el material TLS de la clínica.
+2. `configtxgen -printOrg` produce su definición de organización.
+3. Se baja el config de `canal-universal`, se le inyecta la org en `Application.groups`,
+   se computa el delta y **lo firman las clínicas existentes** (política `MAJORITY
+   Admins`). Este paso es el alta de verdad: al commitearse, la org es miembro.
+4. Se levanta su `peer0` desde una plantilla de compose renderizada.
+5. El peer hace join a `canal-universal` y publica su anchor peer.
+6. Se crea su canal privado (`canal-<key>`), del que es única miembro.
+7. Instala el chaincode y aprueba la definición ya commiteada — con eso puede endosar.
+   No hace falta re-commitear: las aprobaciones son por org y la política implícita
+   `MAJORITY Endorsement` se recalcula sola con el nuevo miembro.
+8. `RegisterClinic` deja el alta asentada on-chain.
+
+La baja hace el camino inverso: revoca los consentimientos vigentes **hacia** esa org
+(cada uno lo revoca su otorgante, que es el único que puede), asienta `DeactivateClinic`,
+saca la org del config del canal y apaga su peer. Lo que **no** se borra: los activos que
+emitió y la auditoría que generó siguen en el ledger. Es a propósito — el punto es que el
+rastro sea inmutable, y una institución que se va no puede borrar su historia.
+
+Sobre quién firma la baja: si con las orgs restantes alcanza la mayoría, se firma **sin**
+la saliente (la sacan las demás). Si no alcanza —el caso de dos orgs, donde la mayoría son
+las dos—, firma también ella: es una salida voluntaria.
+
+### El registro de clínicas
+
+`network/organizations/clinics.json` es la fuente de verdad local de qué orgs existen, con
+qué MSP ID y en qué puertos. Lo crea `network.sh up` con las dos fundadoras y lo actualizan
+los scripts de alta/baja. Lo leen `envVar.sh` (así `setGlobals` funciona igual para una
+clínica nueva que para las fundadoras), `deployChaincode.sh` y la capa de aplicación
+(`application/src/config.js`, que lo relee cuando cambia el mtime — por eso un alta
+aparece en el dashboard sin reiniciar el backend). Es estado de runtime: nace con `up` y
+muere con `down`, igual que el material criptográfico que describe.
+
+En paralelo hay un **registro on-chain** (`RegisterClinic` / `DeactivateClinic` /
+`GetAllClinics` / `GetClinicHistory`). No duplica al anterior: la config del canal guarda
+el estado actual pero no la historia, y acá cada alta y cada baja quedan como versiones
+inmutables con quién las ejecutó, cuándo y por qué. El chaincode además lo usa como
+autorización — `CheckAccess` deniega a toda org que no figure como `ACTIVA`, y
+`EmitAsset`/`GrantConsent` la rechazan. El dashboard muestra las dos vistas por separado
+porque pueden discrepar, y esa discrepancia es información (p.ej. una org en el canal pero
+sin registrar es, deliberadamente, tratada como no habilitada).
+
+### Puertos
+
+Las fundadoras conservan los suyos (7051/9051). Las nuevas arrancan en 11051 y suben de a
+1000, con operations en la serie 9446+. Los de una clínica dada de baja no se reutilizan.
+
+### Limitación conocida
+
+No se puede volver a dar de alta un `key` ya usado: su canal privado quedó creado en el
+orderer y el `osnadmin channel join` fallaría. Para volver a incorporar una institución
+que se fue, usar otro `key`.
 
 ## Troubleshooting
 
@@ -454,7 +528,9 @@ idempotente salvo por el append a `.bashrc`, que ya está guardado con un check)
 ```
 .devcontainer/       Entorno de desarrollo reproducible (paso 0)
 network/             Red Fabric propia: configtx.yaml, docker-compose, scripts (paso 2)
-chaincode/           Chaincode Go: consentimiento + ABAC + auditoría (paso 3)
+network/scripts/     network.sh y helpers; addOrg.sh / removeOrg.sh (alta y baja de clínicas)
+network/*/…template… Plantillas que se renderizan una vez por clínica dada de alta
+chaincode/           Chaincode Go: consentimiento + ABAC + auditoría + registro de clínicas
 application/src/     Cliente por org: cifrado, IPFS, eventos, entrega de clave (paso 5)
 application/server/  BFF Express del dashboard: REST + SSE sobre los módulos de src/
 application/web/     Dashboard React (Vite): topología, acciones, tablas, feed en vivo

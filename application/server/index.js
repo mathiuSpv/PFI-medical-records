@@ -5,7 +5,7 @@
 'use strict';
 
 const express = require('express');
-const routes = require('./routes');
+const buildRoutes = require('./routes');
 const { startEventListener } = require('./fabric');
 
 const PORT = process.env.PORT || 3001;
@@ -43,7 +43,9 @@ setInterval(() => {
 }, 15000).unref();
 
 // --- REST --------------------------------------------------------------------
-app.use('/api', routes);
+// El router recibe broadcast: el alta y la baja de clínicas informan su avance
+// por SSE mientras corren.
+app.use('/api', buildRoutes(broadcast));
 
 app.listen(PORT, () => {
   console.log(`[server] BFF escuchando en http://localhost:${PORT}`);

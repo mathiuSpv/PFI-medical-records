@@ -2,8 +2,8 @@
 // acceso, siempre con la identidad de la org activa. El paciente se ingresa
 // en claro (p.ej. "paciente-demo-001") y el backend lo hashea (SHA-256) —
 // on-chain solo viaja el hash.
-import { useState } from 'react';
-import { api, ORGS, otherOrg } from '../api.js';
+import { useEffect, useState } from 'react';
+import { api, clinicByKey } from '../api.js';
 
 const RESOURCE_TYPES = ['Observation', 'MedicationRequest', 'DiagnosticReport', 'Condition'];
 
@@ -26,7 +26,7 @@ function defaultExpiry() {
   return d.toISOString().slice(0, 10);
 }
 
-export default function ActionsPanel({ org, onDone }) {
+export default function ActionsPanel({ org, clinics, onDone }) {
   const [tab, setTab] = useState('emitir');
   const [patientId, setPatientId] = useState('paciente-demo-001');
   const [resourceType, setResourceType] = useState('Observation');
@@ -36,7 +36,18 @@ export default function ActionsPanel({ org, onDone }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
-  const other = ORGS[otherOrg(org)];
+  // Con más de dos clínicas ya no existe "la otra": hay que elegir a quién se
+  // le otorga el consentimiento.
+  const destinatarias = clinics.filter((c) => c.key !== org);
+  const [targetKey, setTargetKey] = useState(destinatarias[0]?.key);
+  useEffect(() => {
+    if (!destinatarias.some((c) => c.key === targetKey)) {
+      setTargetKey(destinatarias[0]?.key);
+    }
+  }, [destinatarias, targetKey]);
+
+  const yo = clinicByKey(org) ?? { label: org, color: 'var(--muted)' };
+  const other = clinicByKey(targetKey);
 
   const run = async (label, fn) => {
     setBusy(true);
@@ -82,7 +93,7 @@ export default function ActionsPanel({ org, onDone }) {
       <div className="panel-head">
         <h2>Acciones</h2>
         <span className="hint">
-          firmando como <strong style={{ color: ORGS[org].color }}>{ORGS[org].label}</strong>
+          firmando como <strong style={{ color: yo.color }}>{yo.label}</strong>
         </span>
       </div>
 
@@ -118,7 +129,12 @@ export default function ActionsPanel({ org, onDone }) {
 
         {tab === 'consentir' && (
           <>
-            <div className="field-label">Otorgar a: <strong style={{ color: other.color }}>{other.label}</strong> (la otra org)</div>
+            <label>
+              Otorgar a
+              <select value={targetKey ?? ''} onChange={(e) => setTargetKey(e.target.value)}>
+                {destinatarias.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+            </label>
             <div className="checkboxes">
               {RESOURCE_TYPES.map((t) => (
                 <label key={t} className="checkbox">
@@ -132,9 +148,9 @@ export default function ActionsPanel({ org, onDone }) {
               <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
             </label>
             <div className="btn-row">
-              <button className="primary" disabled={busy || grantTypes.length === 0} onClick={otorgar}>Otorgar consentimiento</button>
-              <button disabled={busy || grantTypes.length === 0} onClick={() => revocar(false)}>Revocar seleccionados</button>
-              <button className="danger" disabled={busy} onClick={() => revocar(true)}>Revocar todo</button>
+              <button className="primary" disabled={busy || !other || grantTypes.length === 0} onClick={otorgar}>Otorgar consentimiento</button>
+              <button disabled={busy || !other || grantTypes.length === 0} onClick={() => revocar(false)}>Revocar seleccionados</button>
+              <button className="danger" disabled={busy || !other} onClick={() => revocar(true)}>Revocar todo</button>
             </div>
           </>
         )}

@@ -21,7 +21,13 @@ CC_SRC_PATH="${NETWORK_HOME}/../chaincode"
 CHANNEL_NAME="canal-universal"
 DELAY=3
 MAX_RETRY=5
-ORGS=(sancristobal montenegro)
+
+# Las orgs salen del registro de clínicas, no de una lista fija: así un
+# redeploy después de un alta instala y aprueba también en las nuevas.
+registryRequire
+ORGS=()
+mapfile -t ORGS < <(clinicKeys activa)
+[ ${#ORGS[@]} -ge 1 ] || fatalln "No hay clínicas activas en el registro"
 
 infoln "Vendorizando dependencias Go en ${CC_SRC_PATH}"
 (cd "${CC_SRC_PATH}" && GO111MODULE=on go mod vendor)
@@ -85,12 +91,12 @@ infoln "Commiteando la definición en '${CHANNEL_NAME}'"
 # --peerAddresses son endpoints alcanzables desde el cliente peer (este shell,
 # fuera de la red docker), por eso van por localhost:<puerto publicado> y no
 # por el hostname interno peer0.<org>.example.com que usa el anchor peer.
-setGlobals sancristobal
+setGlobals "${ORGS[0]}"
 set +e
+# shellcheck disable=SC2046
 peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
   --tls --cafile "$ORDERER_CA" --channelID "${CHANNEL_NAME}" --name "${CC_NAME}" \
-  --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_SANCRISTOBAL_CA" \
-  --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_MONTENEGRO_CA" \
+  $(peerAddressArgs "${ORGS[@]}") \
   --version "${CC_VERSION}" --sequence "${CC_SEQUENCE}" >/tmp/commit.log 2>&1
 res=$?
 set -e
@@ -101,4 +107,45 @@ successln "Chaincode '${CC_NAME}' commiteado en '${CHANNEL_NAME}'"
 for org in "${ORGS[@]}"; do
   setGlobals "$org"
   peer lifecycle chaincode querycommitted --channelID "${CHANNEL_NAME}" --name "${CC_NAME}"
+done
+
+# --- Registro on-chain de las clínicas ---------------------------------------
+# El chaincode deniega a toda org que no figure como clínica activa, así que las
+# que ya están en el canal tienen que quedar registradas acá mismo. La primera
+# se registra a sí misma (el registro está vacío: es el arranque en frío que
+# contempla RegisterClinic); a partir de ahí registra ella a las demás.
+infoln "Registrando las clínicas del canal en el ledger"
+REGISTRAR=""
+for org in "${ORGS[@]}"; do
+  mspid=$(clinicField "$org" mspId)
+  nombre=$(clinicField "$org" nombre)
+  domain=$(clinicField "$org" domain)
+  endpoint=$(peerHost "$org")
+
+  setGlobals "${REGISTRAR:-$org}"
+  payload=$(jq -nc --arg m "$mspid" --arg n "$nombre" --arg d "$domain" --arg e "$endpoint" \
+    '{function:"RegisterClinic", Args:[$m, $n, $d, $e]}')
+
+  set +e
+  # shellcheck disable=SC2046
+  peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
+    --tls --cafile "$ORDERER_CA" -C "${CHANNEL_NAME}" -n "${CC_NAME}" \
+    $(peerAddressArgs "${ORGS[@]}") -c "$payload" >/tmp/register.log 2>&1
+  rres=$?
+  set -e
+  if [ $rres -ne 0 ]; then
+    if grep -q "ya está registrada y activa" /tmp/register.log; then
+      infoln "${mspid} ya estaba registrada"
+    else
+      cat /tmp/register.log
+      errorln "No se pudo registrar ${mspid} en el ledger"
+    fi
+  else
+    successln "${mspid} registrada como clínica activa"
+  fi
+
+  [ -n "$REGISTRAR" ] || REGISTRAR=$org
+  # El registro se lee con una range query, así que dos altas en el mismo
+  # bloque chocan por phantom read: se espacian.
+  sleep $DELAY
 done

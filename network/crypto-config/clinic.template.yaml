@@ -1,0 +1,15 @@
+# Plantilla de material criptográfico para una clínica dada de alta en
+# caliente (scripts/addOrg.sh la renderiza reemplazando los __PLACEHOLDER__ y
+# se la pasa a cryptogen). Las dos fundadoras siguen teniendo su archivo fijo
+# (sancristobal.yaml, montenegro.yaml) porque se generan antes de que exista
+# el registro.
+PeerOrgs:
+  - Name: __ORG_NAME__
+    Domain: __DOMAIN__
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - localhost
+    Users:
+      Count: 1

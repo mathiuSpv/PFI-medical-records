@@ -5,9 +5,13 @@
 #   ./network.sh up              levanta cryptogen + contenedores
 #   ./network.sh createChannels  crea canal-universal, canal-sancristobal y
 #                                 canal-montenegro (requiere 'up' previo)
+#   ./network.sh deployCC        despliega el chaincode de consentimiento
 #   ./network.sh down            baja todo y borra material generado
 #   ./network.sh ipfsUp          levanta el nodo IPFS local (Kubo), API en :5001
 #   ./network.sh ipfsDown        baja el nodo IPFS y borra su volumen
+#   ./network.sh clinics         lista las clínicas de la red y su estado
+#   ./network.sh addClinic <key> "<Nombre>"   alta de una clínica nueva
+#   ./network.sh removeClinic <key> ["<motivo>"]  baja de una clínica
 #
 # Requiere el devcontainer del proyecto (peer/configtxgen/cryptogen/osnadmin
 # en el PATH, Docker-in-Docker activo). Ver README para detalles.
@@ -18,6 +22,7 @@ NETWORK_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$NETWORK_HOME"
 export NETWORK_HOME
 . scripts/utils.sh
+. scripts/orgRegistry.sh
 
 : "${CONTAINER_CLI:=docker}"
 if command -v "${CONTAINER_CLI}-compose" > /dev/null 2>&1; then
@@ -53,10 +58,43 @@ generateCrypto() {
 
 networkUp() {
   generateCrypto
+  # El registro de clínicas nace acá con las dos fundadoras; a partir de este
+  # punto es la fuente de verdad de qué orgs existen (lo leen envVar.sh, los
+  # scripts de alta/baja y la capa de aplicación).
+  registryInit
   infoln "Levantando orderer + peer0 de cada clínica"
   DOCKER_SOCK="${DOCKER_SOCK}" ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_FILE} up -d
   sleep 3
   ${CONTAINER_CLI} ps -a --filter label=service=hyperledger-fabric
+}
+
+addClinic() {
+  [ -d "organizations/peerOrganizations" ] || fatalln "Correr './network.sh up' primero"
+  scripts/addOrg.sh "$@"
+}
+
+removeClinic() {
+  [ -d "organizations/peerOrganizations" ] || fatalln "Correr './network.sh up' primero"
+  scripts/removeOrg.sh "$@"
+}
+
+listClinics() {
+  registryRequire
+  printf '%-14s %-28s %-28s %-7s %-8s %s\n' KEY NOMBRE MSPID PEER ESTADO CONTENEDOR
+  while read -r row; do
+    key=$(echo "$row" | jq -r .key)
+    nombre=$(echo "$row" | jq -r .nombre)
+    mspid=$(echo "$row" | jq -r .mspId)
+    port=$(echo "$row" | jq -r .peerPort)
+    estado=$(echo "$row" | jq -r .estado)
+    domain=$(echo "$row" | jq -r .domain)
+    if ${CONTAINER_CLI} ps --format '{{.Names}}' | grep -qx "peer0.${domain}"; then
+      cont="up"
+    else
+      cont="-"
+    fi
+    printf '%-14s %-28s %-28s %-7s %-8s %s\n' "$key" "$nombre" "$mspid" "$port" "$estado" "$cont"
+  done < <(jq -c '.clinics[]' "$(registryFile)")
 }
 
 createChannels() {
@@ -101,9 +139,23 @@ ipfsDown() {
 
 networkDown() {
   infoln "Bajando la red y borrando material generado"
+
+  # Primero las clínicas dadas de alta en caliente (compose propio cada una),
+  # después la red base: si se hace al revés, el `down` de la red borra la red
+  # docker que los peers de las clínicas todavía usan.
+  if [ -f "$(registryFile)" ]; then
+    while read -r cf; do
+      [ -n "$cf" ] && [ -f "$cf" ] || continue
+      infoln "Bajando ${cf}"
+      DOCKER_SOCK="${DOCKER_SOCK}" ${CONTAINER_CLI_COMPOSE} -f "$cf" down --volumes --remove-orphans || true
+    done < <(composeFilesTodos)
+  fi
+
   DOCKER_SOCK="${DOCKER_SOCK}" ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_FILE} down --volumes --remove-orphans
   rm -rf organizations channel-artifacts "../chaincode/vendor"
-  rm -f /tmp/osnadmin.log /tmp/join.log /tmp/anchor.log /tmp/install.log /tmp/approve.log /tmp/commit.log
+  rm -rf compose/generated configtx/generated crypto-config/generated
+  rm -f /tmp/osnadmin.log /tmp/join.log /tmp/anchor.log /tmp/install.log /tmp/approve.log /tmp/commit.log \
+        /tmp/signconfigtx.log /tmp/configupdate.log /tmp/register.log /tmp/revoke.log /tmp/deactivate.log
   successln "Red abajo"
 }
 
@@ -127,7 +179,18 @@ case "$COMMAND" in
   ipfsDown)
     ipfsDown
     ;;
+  clinics)
+    listClinics
+    ;;
+  addClinic)
+    shift
+    addClinic "$@"
+    ;;
+  removeClinic)
+    shift
+    removeClinic "$@"
+    ;;
   *)
-    fatalln "Uso: ./network.sh {up|createChannels|deployCC|down|ipfsUp|ipfsDown}"
+    fatalln "Uso: ./network.sh {up|createChannels|deployCC|down|ipfsUp|ipfsDown|clinics|addClinic|removeClinic}"
     ;;
 esac

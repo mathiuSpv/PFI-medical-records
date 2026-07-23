@@ -1,3 +1,9 @@
 # Generado por cryptogen/configtxgen — nunca versionar material criptográfico.
 organizations/
 channel-artifacts/
+
+# Renderizado por scripts/addOrg.sh a partir de las plantillas, una vez por
+# clínica dada de alta en caliente. Se regenera solo y muere con 'network.sh down'.
+compose/generated/
+configtx/generated/
+crypto-config/generated/
