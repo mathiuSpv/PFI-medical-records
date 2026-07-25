@@ -70,6 +70,32 @@ export default function EventFeed({ feed }) {
           if (item.type === 'key-delivery') {
             return <DeliveryCard key={item.delivery.id} delivery={item.delivery} />;
           }
+
+          // Alta y baja de instituciones: el registro on-chain también emite
+          // eventos, y no se leen como un acceso (no hay solicitante ni
+          // paciente), así que tienen su propia tarjeta.
+          if (item.type === 'clinic-event') {
+            const alta = item.eventName === 'ClinicRegistered';
+            return (
+              <div className="feed-item" key={`${item.txId}-${i}`}>
+                <div className="feed-title">
+                  {alta ? '🏥' : '🚪'} {item.eventName} <span className="muted">{fmtTs(item.receivedAt)}</span>
+                </div>
+                <div className="feed-body">
+                  <span className="org-badge" style={{ color: orgByMsp(item.mspId).color }}>
+                    {item.nombre || item.mspId}
+                  </span>
+                  {alta ? ' se incorporó al bus' : ' fue dada de baja del bus'}
+                  <div className="muted">
+                    <code title={item.mspId}>{item.mspId}</code>
+                    {' · bloque '}{item.blockNumber}
+                    {' · tx '}<code title={item.txId}>{shortHash(item.txId, 8)}</code>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           const req = orgByMsp(item.requesterOrg);
           return (
             <div className="feed-item" key={`${item.txId}-${i}`}>

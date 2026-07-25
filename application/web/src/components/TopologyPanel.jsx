@@ -54,10 +54,13 @@ export default function TopologyPanel({ org, clinics, tick }) {
   // que el MSP ID siga siendo legible (después de eso el SVG scrollea).
   const anchoCaja = Math.max(150, Math.min(200, paso - 20));
 
-  const Y_ORDERER = 10;
-  const Y_BUS = 96;
-  const Y_PEERS = 172;
-  const Y_CANALES = 254;
+  // Con aire arriba: la caja de IPFS va a la misma altura que el orderer y
+  // pegada al borde se le comía el borde superior.
+  const Y_ORDERER = 18;
+  const Y_BUS = 104;
+  const Y_PEERS = 180;
+  const Y_CANALES = 262;
+  const X_IPFS = 866;
 
   return (
     <section className="panel">
@@ -68,13 +71,13 @@ export default function TopologyPanel({ org, clinics, tick }) {
         </span>
       </div>
       <div className="topology-scroll">
-        <svg viewBox={`0 0 ${W} 330`} className="topology" style={{ minWidth: n > 4 ? `${n * 200}px` : undefined }}>
+        <svg viewBox={`0 0 ${W} 340`} className="topology" style={{ minWidth: n > 4 ? `${n * 200}px` : undefined }}>
           {/* orderer -> bus del canal público */}
           <line x1={W / 2} y1={Y_ORDERER + 52} x2={W / 2} y2={Y_BUS} className="link" />
           {/* IPFS: fuera del ledger, lo usa la capa de aplicación. La línea
               arranca en el borde del orderer y termina en el de IPFS, no en
               sus centros, para no cruzar por encima de las cajas. */}
-          <line x1={W / 2 + 100} y1={Y_ORDERER + 26} x2={825} y2={Y_ORDERER + 26} className="link dashed" />
+          <line x1={W / 2 + 100} y1={Y_ORDERER + 26} x2={X_IPFS - 65} y2={Y_ORDERER + 26} className="link dashed" />
 
           {clinics.map((c, i) => (
             <g key={`links-${c.key}`}>
@@ -91,7 +94,7 @@ export default function TopologyPanel({ org, clinics, tick }) {
             ok={status?.orderer.ok}
           />
           <NodeBox
-            x={890} y={Y_ORDERER} w={130}
+            x={X_IPFS} y={Y_ORDERER} w={130}
             title="IPFS (Kubo)"
             subtitle={status?.ipfs.version ? `v${status.ipfs.version} · off-chain` : 'payload cifrado'}
             ok={status?.ipfs.ok}
@@ -121,7 +124,7 @@ export default function TopologyPanel({ org, clinics, tick }) {
             />
           ))}
 
-          <text x={W / 2} y="320" textAnchor="middle" className="topology-note">
+          <text x={W / 2} y="330" textAnchor="middle" className="topology-note">
             El payload clínico cifrado vive en IPFS; el ledger solo guarda metadatos, consentimiento y auditoría.
           </text>
         </svg>
