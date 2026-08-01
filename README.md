@@ -189,12 +189,24 @@ Chaincode Go (`pfi-medical-records/chaincode`, contractapi) desplegado en
   grantedToOrg, resourceTypesJSON)` revoca total (`[]`) o parcial, y solo la org que
   otorgó el consentimiento puede revocarlo. Nunca se borra el estado — el historial
   queda en el ledger (`GetConsentHistory`, vía `GetHistoryForKey`).
-- **`access.go`** — `CheckAccess(resourceType, patientIDHash)` evalúa ABAC con deny por
-  defecto: PERMIT solo si hay un `Consent` vigente (no revocado, no vencido) que cubra
-  ese `resourceType`. Cada evaluación (PERMIT o DENY) se persiste como `AccessLog`
-  (auditoría con TxID, timestamp, org, resource type, motivo) y un PERMIT además dispara
-  el evento de chaincode `AccessPermitted`, que en el paso 5 escucha la app de la org
-  dueña del recurso para entregar la clave AES envuelta.
+- **`access.go`** — `CheckAccess(fhirResourceID)` evalúa ABAC con deny por defecto sobre
+  **un recurso concreto**: PERMIT solo si hay un `Consent` vigente (no revocado, no
+  vencido) que cubra el resource type de ese activo para el paciente de ese activo. El
+  tipo y el paciente se derivan del activo, no los manda el solicitante. Cada evaluación
+  (PERMIT o DENY) se persiste como `AccessLog` (TxID, timestamp, org solicitante,
+  **recurso**, tipo, paciente, org dueña, motivo) y un PERMIT además dispara el evento de
+  chaincode `AccessPermitted`, que escucha la app de la org dueña del recurso para
+  entregar la clave AES envuelta.
+
+  Recibe el recurso y no el par `(resourceType, patientIDHash)` por dos razones. Una es de
+  auditoría: con el tipo solamente, el `AccessLog` no permitía reconstruir **cuál** de los
+  recursos del paciente se accedió. La otra es de seguridad: si el solicitante declara el
+  tipo y el paciente, puede elegir los valores que hagan coincidir un consentimiento que
+  no cubre el recurso que después va a descargar.
+
+  El consentimiento sigue siendo por `(paciente, resource type)` y no por recurso, a
+  propósito: clínicamente uno consiente categorías de información, no resultados que
+  todavía no existen. Lo que pasó a ser por recurso es la **evaluación** y su rastro.
 - **`util.go`** — normalización determinista de listas de resource types (dedup +
   sort; la iteración de un `map` en Go no es determinista, así que nunca se persiste
   nada cuyo orden dependa de eso).
@@ -234,8 +246,12 @@ invokeBoth '{"function":"GrantConsent","Args":["hashPaciente001","ClinicaMontene
 sleep 3
 
 setGlobals montenegro
-invokeBoth '{"function":"CheckAccess","Args":["Observation","hashPaciente001"]}'   # PERMIT
+invokeBoth '{"function":"CheckAccess","Args":["obs-001"]}'   # PERMIT
 ```
+
+Nota sobre `hashPaciente001` en el ejemplo: es un literal de prueba. En el flujo real ese
+valor lo produce la capa de aplicación con HMAC y la clave de red — ver
+[Referencia de paciente](#referencia-de-paciente).
 
 ## Paso 4 — Nodo IPFS local (`network/compose/compose-ipfs.yaml`)
 
@@ -305,7 +321,7 @@ El flujo de `demo.js` (los nombres de función son literales del chaincode del p
 4. **Solicitud de acceso**: paso fuera del ledger en esta etapa (no hay función de
    chaincode para "pedir" — queda representado como un log). Después, `GrantConsent`
    desde San Cristóbal.
-5. **Montenegro** somete `CheckAccess("Observation", patientIDHash)` → `PERMIT`.
+5. **Montenegro** somete `CheckAccess(fhirResourceID)` → `PERMIT`.
 6. El evento `AccessPermitted` le llega a San Cristóbal con el certificado X.509 de
    Montenegro adentro (lo agrega el chaincode, ver más abajo). San Cristóbal envuelve la
    clave AES para ese certificado y "entrega" la clave — acá el log simulado, según el
@@ -380,6 +396,39 @@ Limitaciones (prototipo, iguales al paso 5): el BFF tiene las identidades de tod
 orgs (solo entorno dev — en despliegue real cada org corre su propia instancia); el
 keystore de claves AES y las entregas viven en memoria del server (se pierden al
 reiniciarlo; los metadatos on-chain e IPFS persisten); tablas sin paginación.
+
+## Referencia de paciente
+
+`canal-universal` guarda el identificador del paciente seudonimizado y **en claro para
+todos los miembros del canal**. Con un hash pelado —SHA-256 del DNI, que es lo que hacía
+antes la capa de aplicación— la seudonimización es aparente: el espacio de DNI argentinos
+son ~10⁸ valores, así que cualquier miembro del canal los recorre en segundos, arma la
+tabla completa y sabe de qué paciente es cada recurso. Eso convierte el canal público en
+un registro de datos de salud identificables, que es exactamente lo que la Ley 25.326
+trata como dato sensible.
+
+Lo que va al ledger ahora es `HMAC-SHA256(clave_de_red, patientId)`
+(`application/src/patient.js`). Sin la clave el valor no se invierte por fuerza bruta, y
+con la clave dos instituciones derivan el **mismo** valor para el mismo paciente, que es
+lo que el bus necesita para que la clínica B pueda referirse al paciente de la clínica A.
+
+La clave la genera `network.sh up` en `organizations/patient-index.key` (modo 600,
+gitignored) y muere con `down`, igual que el material criptográfico. Regenerarla equivale
+a rotar la clave: los valores dejan de coincidir con los que ya están en el ledger, y en
+una red real sería una migración, no un reinicio.
+
+Dos decisiones que conviene poder defender:
+
+1. **El HMAC se calcula en la capa de aplicación, nunca en el chaincode.** El chaincode
+   corre en el peer de cada organización y su read/write set queda en el ledger: una
+   clave secreta ahí no sería secreta. El chaincode solo ve el valor opaco y por diseño
+   nunca aprende el identificador real del paciente.
+2. **Límite conocido:** la clave es compartida entre los miembros de la red, así que
+   protege contra un tercero que lea el canal pero **no** contra una institución miembro
+   que decida enumerar. Cerrar eso requiere que la derivación no la pueda hacer cada org
+   por su cuenta (un servicio de índice ciego / OPRF) y queda fuera del alcance de esta
+   etapa. En un despliegue real la clave viviría en un HSM y se distribuiría al
+   incorporar cada institución.
 
 ## Alta y baja de instituciones
 

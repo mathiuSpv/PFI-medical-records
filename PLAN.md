@@ -224,6 +224,43 @@ como filas de una tabla. Post-etapa-1 (no estaba en el plan original).
 Limitación conocida: no se puede reusar el `key` de una clínica dada de baja (su canal
 privado sigue creado en el orderer). Se rechaza con un mensaje explícito.
 
+## Extra — Seudonimización real del paciente y acceso por recurso
+
+Dos huecos que aparecieron al releer el prototipo completo, los dos con impacto directo en
+objetivos específicos. Post-etapa-1.
+
+- [x] **Referencia de paciente con HMAC** (`application/src/patient.js`). Lo que iba al
+      ledger era `SHA-256(patientId)`: con DNI (~10⁸ valores) cualquier miembro del canal
+      enumera el espacio en segundos y re-identifica a todos los pacientes, así que la
+      seudonimización era aparente. Ahora es `HMAC-SHA256(clave_de_red, patientId)`, con
+      la clave generada por `network.sh up` en `organizations/patient-index.key` (modo
+      600) y calculada **solo** en la capa de aplicación — el chaincode nunca ve un
+      secreto ni aprende el identificador. Límite documentado: protege contra terceros,
+      no contra un miembro que decida enumerar (eso pide un índice ciego / OPRF).
+      Verificado: el valor on-chain ya no coincide con el SHA-256 del identificador.
+- [x] **`CheckAccess(fhirResourceID)`** en vez de `CheckAccess(resourceType, patientIDHash)`.
+      El tipo y el paciente los deriva el chaincode del activo, con lo que (a) el
+      `AccessLog` registra **cuál** recurso se accedió —antes solo el tipo, así que con
+      varios recursos del mismo tipo era imposible reconstruir qué se entregó— y (b) el
+      solicitante ya no puede declarar tipo y paciente para hacer coincidir un
+      consentimiento que no cubre el recurso que va a descargar. `AccessLog` suma
+      `FhirResourceID` y `AssetOwnerOrg`. El consentimiento sigue siendo por
+      `(paciente, tipo)` a propósito: se consienten categorías, no resultados que todavía
+      no existen; lo que pasó a ser por recurso es la evaluación y su rastro.
+- [x] **Bug encontrado de paso:** el keyStore del BFF se indexaba por
+      `${paciente}:${tipo}`, así que con dos Observations del mismo paciente la clave de
+      la segunda pisaba a la de la primera y la entrega podía envolver la clave
+      equivocada. Ahora que el evento trae el `FhirResourceID` se indexa por recurso.
+      Verificado emitiendo dos Observations del mismo paciente: cada entrega descifra la
+      suya.
+- [x] Front: "Pedir acceso" pasa a elegir un **recurso** de la lista de activos (con su
+      tipo, paciente y org dueña) en vez de un tipo; el campo de paciente desaparece de
+      esa pestaña porque ya no se usa. La auditoría suma columna Recurso.
+- [x] Entorno: `vite.config.js` con `strictPort` (si el 5173 está ocupado Vite se mudaba
+      de puerto y el navegador seguía hablando con la instancia vieja, que es un rato
+      perdido buscando un bug que no existe) y `watch.usePolling` opt-in por
+      `VITE_POLLING=1` para los bind mounts de Windows, donde inotify no llega.
+
 ## Fuera de alcance (etapa 1)
 
 IPFS distribuido/pinning externo, modelado FHIR completo, HSM/gestión avanzada de claves.

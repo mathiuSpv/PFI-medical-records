@@ -25,7 +25,6 @@
 'use strict';
 
 const fs = require('node:fs/promises');
-const crypto = require('node:crypto');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 
@@ -33,6 +32,7 @@ const { newGatewayForOrg } = require('./connect');
 const { listenForEvents } = require('./events');
 const { encryptResource, decryptResource, wrapKeyForRecipient } = require('./crypto');
 const { uploadToIPFS, downloadFromIPFS } = require('./ipfs');
+const { patientRef } = require('./patient');
 const { CHANNEL_NAME, CHAINCODE_NAME } = require('./config');
 
 const SAMPLE_PATH = path.join(__dirname, '..', 'sample-data', 'observation-001.json');
@@ -77,8 +77,11 @@ async function main() {
 
     const fhirResourceID = `obs-${Date.now()}`;
     const resourceType = 'Observation';
-    const patientIDHash = crypto.createHash('sha256').update('paciente-demo-001').digest('hex');
-    keyStore.set(`${patientIDHash}:${resourceType}`, aesKey);
+    // Referencia opaca del paciente: HMAC con la clave de red, no un hash
+    // pelado — ver patient.js para por qué el SHA-256 directo no alcanzaba.
+    const patientIDHash = patientRef('paciente-demo-001');
+    // Indexado por recurso: dos activos del mismo tipo y paciente ya no se pisan.
+    keyStore.set(fhirResourceID, aesKey);
 
     // --- 2) EmitAsset: metadatos públicos en canal-universal ---------------
     await scContract.submitTransaction('EmitAsset', fhirResourceID, resourceType, cid, patientIDHash);
@@ -87,12 +90,12 @@ async function main() {
     // --- 3) San Cristóbal escucha eventos sobre sus propios recursos -------
     const { events, done: listenerDone } = await listenForEvents(scNetwork, (event, payload) => {
       if (event.eventName !== 'AccessPermitted') return;
-      if (payload.PatientIDHash !== patientIDHash || payload.ResourceType !== resourceType) return;
+      if (payload.FhirResourceID !== fhirResourceID) return;
 
       console.log(`\n<-- [${sancristobal.mspId}] Evento AccessPermitted recibido (tx ${event.transactionId})`);
       console.log(`    Solicitante: ${payload.RequesterOrg}`);
 
-      const key = keyStore.get(`${payload.PatientIDHash}:${payload.ResourceType}`);
+      const key = keyStore.get(payload.FhirResourceID);
       if (!key) {
         console.log('    (sin clave local para este recurso, se ignora)');
         return;
@@ -105,7 +108,7 @@ async function main() {
     });
 
     // --- 4) Solicitud de acceso (fuera del ledger en esta etapa) -----------
-    console.log(`\n[${montenegro.mspId}] Solicitud de acceso a ${resourceType} de paciente ${patientIDHash.slice(0, 12)}… (fuera del ledger: mail/llamada a San Cristóbal)`);
+    console.log(`\n[${montenegro.mspId}] Solicitud de acceso al recurso ${fhirResourceID} (${resourceType}) del paciente ${patientIDHash.slice(0, 12)}… (fuera del ledger: mail/llamada a San Cristóbal)`);
 
     // --- 5) GrantConsent -----------------------------------------------------
     await scContract.submitTransaction(
@@ -118,7 +121,9 @@ async function main() {
     console.log(`[${sancristobal.mspId}] GrantConsent OK (${montenegro.mspId}, ${resourceType}, 1 año)`);
 
     // --- 6) CheckAccess (on-chain, ABAC) -------------------------------------
-    const decisionBytes = await mtContract.submitTransaction('CheckAccess', resourceType, patientIDHash);
+    // Va por recurso puntual: el tipo y el paciente los deriva el chaincode del
+    // activo, así que el solicitante no puede declararlos a conveniencia.
+    const decisionBytes = await mtContract.submitTransaction('CheckAccess', fhirResourceID);
     const decision = Buffer.from(decisionBytes).toString('utf8');
     console.log(`[${montenegro.mspId}] CheckAccess -> ${decision}`);
     assert.equal(decision, 'PERMIT');

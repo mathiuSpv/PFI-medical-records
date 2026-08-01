@@ -56,12 +56,31 @@ generateCrypto() {
   successln "Material criptográfico generado en network/organizations/"
 }
 
+# La clave con la que la capa de aplicación deriva la referencia opaca del
+# paciente (HMAC-SHA256) antes de mandarla al ledger. Es secreta y compartida
+# por los miembros de la red: sin ella el valor que queda on-chain no se puede
+# invertir por fuerza bruta. Nunca entra al chaincode — ver
+# application/src/patient.js.
+generatePatientKey() {
+  local key_file="organizations/patient-index.key"
+  if [ -f "${key_file}" ]; then
+    infoln "Clave de índice de pacientes ya generada"
+    return
+  fi
+  mkdir -p organizations
+  # od en vez de openssl: es coreutils, está siempre.
+  head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "${key_file}"
+  chmod 600 "${key_file}"
+  successln "Clave de índice de pacientes generada en ${key_file}"
+}
+
 networkUp() {
   generateCrypto
   # El registro de clínicas nace acá con las dos fundadoras; a partir de este
   # punto es la fuente de verdad de qué orgs existen (lo leen envVar.sh, los
   # scripts de alta/baja y la capa de aplicación).
   registryInit
+  generatePatientKey
   infoln "Levantando orderer + peer0 de cada clínica"
   DOCKER_SOCK="${DOCKER_SOCK}" ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_FILE} up -d
   sleep 3
