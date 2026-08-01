@@ -41,8 +41,9 @@
         }
     },
     // La red Fabric y el nodo IPFS exponen puertos dentro del devcontainer;
-    // estos forwards permiten tocarlos desde el host si hace falta (ej: UI de IPFS).
-    "forwardPorts": [5001, 8080],
+    // estos forwards permiten tocarlos desde el host si hace falta.
+    // 5001/8080: API y gateway de IPFS · 3001: BFF del dashboard · 5173: Vite dev
+    "forwardPorts": [5001, 8080, 3001, 5173],
     "hostRequirements": {
         "memory": "8gb"
     }

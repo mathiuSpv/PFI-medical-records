@@ -9,10 +9,13 @@
   "type": "commonjs",
   "scripts": {
     "demo": "node src/demo.js",
-    "listen": "node src/listen.js"
+    "listen": "node src/listen.js",
+    "server": "node server/index.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.0",
-    "@hyperledger/fabric-gateway": "^1.10.0"
+    "@hyperledger/fabric-gateway": "^1.10.0",
+    "@hyperledger/fabric-protos": "^0.3.7",
+    "express": "^4.21.0"
   }
 }

@@ -25,8 +25,10 @@ type Consent struct {
 	UpdatedAt     string   `json:"UpdatedAt"`
 }
 
+const consentKeyPrefix = "CONSENT_"
+
 func consentKey(patientIDHash string, grantedToOrg string) string {
-	return "CONSENT_" + patientIDHash + "_" + grantedToOrg
+	return consentKeyPrefix + patientIDHash + "_" + grantedToOrg
 }
 
 // GrantConsent otorga (o reemplaza) el consentimiento de patientIDHash para
@@ -180,6 +182,12 @@ func (s *SmartContract) GetConsent(ctx contractapi.TransactionContextInterface, 
 		return nil, err
 	}
 	return &consentRecord, nil
+}
+
+// GetAllConsents devuelve todos los consentimientos (vigentes y revocados).
+// Query de solo lectura.
+func (s *SmartContract) GetAllConsents(ctx contractapi.TransactionContextInterface) ([]*Consent, error) {
+	return getAllByPrefix[Consent](ctx, consentKeyPrefix)
 }
 
 // ConsentHistoryEntry es una versión histórica de un Consent, tal como quedó

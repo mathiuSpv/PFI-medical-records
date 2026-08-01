@@ -14,8 +14,10 @@ NETWORK_HOME=${NETWORK_HOME:-${PWD}}
 
 CC_NAME="consent"
 CC_SRC_PATH="${NETWORK_HOME}/../chaincode"
-CC_VERSION="1.0"
-CC_SEQUENCE="1"
+# Overrideables por env para upgrade in-place (p.ej. CC_VERSION=1.1 CC_SEQUENCE=2
+# ./network.sh deployCC); el flujo documentado sigue siendo redeploy fresco.
+: "${CC_VERSION:=1.0}"
+: "${CC_SEQUENCE:=1}"
 CHANNEL_NAME="canal-universal"
 DELAY=3
 MAX_RETRY=5

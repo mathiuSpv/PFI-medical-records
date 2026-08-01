@@ -21,8 +21,10 @@ type Asset struct {
 	TxID           string `json:"TxID"`
 }
 
+const assetKeyPrefix = "ASSET_"
+
 func assetKey(fhirResourceID string) string {
-	return "ASSET_" + fhirResourceID
+	return assetKeyPrefix + fhirResourceID
 }
 
 // EmitAsset registra los metadatos de un recurso ya subido a IPFS por fuera
@@ -85,4 +87,9 @@ func (s *SmartContract) GetAsset(ctx contractapi.TransactionContextInterface, fh
 		return nil, err
 	}
 	return &asset, nil
+}
+
+// GetAllAssets devuelve todos los activos emitidos. Query de solo lectura.
+func (s *SmartContract) GetAllAssets(ctx contractapi.TransactionContextInterface) ([]*Asset, error) {
+	return getAllByPrefix[Asset](ctx, assetKeyPrefix)
 }
