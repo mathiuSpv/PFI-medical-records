@@ -4,6 +4,8 @@ Prototipo de tesis (UADE): intercambio seguro de recursos HL7 FHIR R4 entre inst
 de salud sobre **Hyperledger Fabric** (control de acceso, consentimiento, auditoría) e
 **IPFS** (almacenamiento del payload clínico cifrado).
 
+> ¿Recién clonás el repo? Guía rápida de arranque: [how-to-run.md](how-to-run.md).
+
 ## Arquitectura (resumen)
 
 Orgs de ejemplo (prototipo): **Clínica San Cristóbal** (`ClinicaSanCristobalMSP`) y
