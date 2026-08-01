@@ -261,6 +261,78 @@ curl -fsS -X POST "http://127.0.0.1:5001/api/v0/cat?arg=$CID"
 curl -fsS "http://127.0.0.1:8080/ipfs/$CID"
 ```
 
+## Paso 5 — Cliente de aplicación (`application/`)
+
+Node.js + [`@hyperledger/fabric-gateway`](https://www.npmjs.com/package/@hyperledger/fabric-gateway)
+(el SDK oficial recomendado desde Fabric 2.4, habla directo con el peer por gRPC — no
+hace falta un SDK admin aparte). Un solo proceso simula las dos organizaciones (en este
+entorno de desarrollo tenemos acceso de archivo al material de ambas); en un despliegue
+real cada org correría su propia instancia, sin acceso a la identidad de la otra — por
+eso el código está separado por org desde el vamos (`connect.js` conecta "una org a la
+vez", nunca asume tener las dos).
+
+```
+application/
+├── package.json
+├── sample-data/observation-001.json   Recurso FHIR-ish de ejemplo (no es FHIR completo)
+└── src/
+    ├── config.js    MSP IDs, endpoints de peer, paths a network/organizations
+    ├── connect.js    Conexión Gateway (gRPC + identidad + firma) por org
+    ├── crypto.js     AES-256-GCM del payload + envoltura ECIES-like de la clave
+    ├── ipfs.js       add/cat contra la API HTTP de Kubo
+    ├── events.js     Listener de eventos de chaincode, compartido por demo.js y listen.js
+    ├── demo.js       Flujo completo de punta a punta (npm run demo)
+    └── listen.js     Listener standalone por org (npm run listen -- <org>)
+```
+
+```bash
+cd network && ./network.sh up && ./network.sh createChannels && ./network.sh deployCC && ./network.sh ipfsUp
+cd ../application && npm install
+npm run demo
+```
+
+El flujo de `demo.js` (los nombres de función son literales del chaincode del paso 3):
+
+1. **San Cristóbal** cifra `sample-data/observation-001.json` (AES-256-GCM), lo sube a
+   IPFS y valida que `IPFS.cat` + descifrado reproduzcan el original exacto.
+2. `EmitAsset(fhirResourceID, "Observation", cid, patientIDHash)` — metadatos en claro en
+   `canal-universal`, la clave AES nunca sale del proceso de San Cristóbal.
+3. San Cristóbal empieza a escuchar eventos de chaincode (`getChaincodeEvents`).
+4. **Solicitud de acceso**: paso fuera del ledger en esta etapa (no hay función de
+   chaincode para "pedir" — queda representado como un log). Después, `GrantConsent`
+   desde San Cristóbal.
+5. **Montenegro** somete `CheckAccess("Observation", patientIDHash)` → `PERMIT`.
+6. El evento `AccessPermitted` le llega a San Cristóbal con el certificado X.509 de
+   Montenegro adentro (lo agrega el chaincode, ver más abajo). San Cristóbal envuelve la
+   clave AES para ese certificado y "entrega" la clave — acá el log simulado, según el
+   alcance de esta etapa (entrega real por HTTP/mTLS es una etapa futura, ver PLAN.md).
+
+### Envoltura de la clave AES (sin RSA)
+
+Los certificados de Fabric (cryptogen) usan EC P-256, no RSA — no hay "cifrar con la
+clave pública" directo tipo RSA-OAEP. `crypto.js#wrapKeyForRecipient` arma un esquema
+tipo ECIES: ECDH efímero contra la clave pública del certificado del solicitante → HKDF-SHA256
+para derivar una clave de envoltura → esa clave envuelve (AES-256-GCM) la clave real del
+recurso. Solo quien tenga la clave privada correspondiente al certificado puede repetir
+el ECDH y desenvolverla — nunca la tenemos nosotros, es la clave privada de la otra org.
+
+Para que la org dueña del recurso tenga el certificado del solicitante sin necesidad de
+un directorio externo, `CheckAccess` (chaincode, `access.go`) agrega
+`RequesterCertPEM` al `AccessLog`/evento vía `ctx.GetClientIdentity().GetX509Certificate()`
+— determinista, no es una llamada de red, es la identidad de quien firmó la tx.
+
+### Listener por org
+
+```bash
+npm run listen -- sancristobal   # en una terminal
+npm run listen -- montenegro     # en otra
+```
+
+Se queda escuchando `AccessPermitted` en `canal-universal` hasta Ctrl+C. Comparte la
+lógica de lectura del stream con `demo.js` (`src/events.js`) — la única diferencia es
+qué hace con cada evento (`demo.js` intenta envolver una clave si tiene el recurso en su
+`keyStore` en memoria; `listen.js` solo imprime el payload).
+
 ## Troubleshooting
 
 ### `MVCC_READ_CONFLICT` al encadenar transacciones de chaincode rápido
@@ -276,6 +348,15 @@ misma clave. `peer chaincode invoke` no espera el commit antes de devolver el co
 `sleep` (o polling del evento de commit) entre transacciones dependientes al probar a
 mano. La capa de aplicación del paso 5 va a necesitar manejar esto con reintento ante
 `MVCC_READ_CONFLICT`, no asumir que un invoke exitoso ya está commiteado.
+
+Actualización tras implementar el paso 5: con `@hyperledger/fabric-gateway` (Node) no
+hizo falta ningún `sleep` ni reintento — `contract.submitTransaction()` del SDK espera
+el evento de commit antes de devolver el control (a diferencia de `peer chaincode
+invoke` por CLI, que solo espera las firmas de endorsement). En decenas de corridas de
+`demo.js` con transacciones dependientes en secuencia (`GrantConsent` seguido de
+`CheckAccess`) no volvió a aparecer `MVCC_READ_CONFLICT`. El problema es real y vale
+tenerlo presente para cualquier integración por CLI o por un SDK que no bloquee hasta el
+commit, pero no fue necesario resolverlo en la capa de aplicación de este prototipo.
 
 ### `peer lifecycle chaincode install` falla con "broken pipe"
 

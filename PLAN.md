@@ -13,7 +13,7 @@ las decisiones de arquitectura (cerradas) están resumidas en el [README](README
 | 2 | Red propia 2 orgs (Clínica San Cristóbal + Clínica Montenegro) | ✅ Completo |
 | 3 | Chaincode Go (consentimiento + ABAC) | ✅ Completo |
 | 4 | Nodo IPFS local (Kubo) | ✅ Completo |
-| 5 | Cliente de aplicación (Node.js) | 🔄 En curso |
+| 5 | Cliente de aplicación (Node.js) | ✅ Completo |
 | 6 | README de estudio completo | 🔄 Continuo (se actualiza en cada paso) |
 
 ## Paso 0 — Devcontainer
@@ -90,6 +90,12 @@ Bug encontrado y corregido durante las pruebas: `RevokeConsent` total dejaba
 con `endorsement failure ... Invalid type. Expected: array, given: null`. Fix: usar
 `[]string{}` en vez de `nil`.
 
+Ampliado en el paso 5: `AccessLog` (y por lo tanto el evento `AccessPermitted`) suma
+`RequesterCertPEM` — el certificado X.509 del solicitante vía
+`ctx.GetClientIdentity().GetX509Certificate()` (determinista, sin red). Sin esto la app
+de la org dueña del recurso no tenía forma de conseguir la clave pública del solicitante
+para envolver la clave AES.
+
 ## Paso 4 — IPFS local (`docker-compose` en `network/` o propio)
 
 - [x] Kubo en Docker, un solo nodo (`network/compose/compose-ipfs.yaml`), API en :5001,
@@ -109,11 +115,36 @@ Node.js + `@hyperledger/fabric-gateway` (decidido: chaincode ya es Go; Node sepa
 "dentro/fuera del ledger", Gateway SDK Node es el más documentado para apps, listener de
 eventos + HTTP entre orgs con menos ceremonia).
 
-- [ ] Cifrar JSON de ejemplo con AES-256-GCM
-- [ ] Subir a IPFS local, obtener CID
-- [ ] Invocar `EmitAsset` con el CID
-- [ ] Flujo completo simulado: solicitud de acceso → `GrantConsent` → `CheckAccess` → evento PERMIT → entrega de clave (log simulado en esta etapa)
-- [ ] Listener de eventos de chaincode por org
+- [x] Cifrar JSON de ejemplo con AES-256-GCM (`src/crypto.js`: `encryptResource`, iv+authTag+ciphertext empaquetados en un solo blob)
+- [x] Subir a IPFS local, obtener CID (`src/ipfs.js`, API HTTP de Kubo — `fetch`/`FormData`/`Blob` nativos de Node, sin cliente IPFS aparte)
+- [x] Invocar `EmitAsset` con el CID
+- [x] Flujo completo simulado: solicitud de acceso (fuera del ledger, representada como log) → `GrantConsent` → `CheckAccess` → evento `AccessPermitted` → entrega de clave (log simulado en esta etapa) — `src/demo.js`, probado de punta a punta con la red y el chaincode reales
+- [x] Listener de eventos de chaincode por org: `src/listen.js <org>` standalone (una terminal por org, hasta Ctrl+C), lógica de escucha compartida con `demo.js` vía `src/events.js`
+
+Decisiones no explícitas en el checklist original:
+
+- **Envoltura de la clave AES real, no solo mencionada**: los certificados de Fabric
+  (cryptogen) son EC P-256, no RSA, así que "envolver con la clave pública X.509" no
+  puede ser RSA-OAEP directo. `src/crypto.js#wrapKeyForRecipient` arma un esquema tipo
+  ECIES: ECDH efímero contra la clave pública del certificado del solicitante → HKDF-SHA256
+  → AES-256-GCM envuelve la clave real. Probado con `unwrapKey` (round-trip) contra un
+  certificado de prueba, y en la demo con el certificado **real** de `User1@montenegro`
+  extraído del evento (ver próximo punto).
+- **`GetChaincodeEvents` de `fabric-gateway` no necesitaba el `sleep` manual del paso 3**:
+  `contract.submitTransaction(...)` del SDK Node espera el commit antes de devolver el
+  control (a diferencia de `peer chaincode invoke` por CLI) — no volvió a aparecer
+  `MVCC_READ_CONFLICT` en ninguna corrida de la demo.
+- **Un solo proceso simula las dos orgs**: `demo.js` abre dos `Gateway` (uno por org, cada
+  uno con su propia identidad/MSP) en el mismo proceso, porque en este entorno de
+  desarrollo local tenemos acceso de archivo al material criptográfico de ambas. En un
+  despliegue real cada organización correría su propia instancia de esta capa, sin acceso
+  a la identidad de la otra — el código ya está separado por org (`connect.js` no sabe de
+  "las dos", solo de "una org a la vez") para que separarlos en dos procesos sea trivial
+  más adelante.
+- **Sin service discovery manual**: a diferencia del CLI (`--peerAddresses` de ambas orgs
+  en el paso 3), el SDK Gateway resuelve el endorsement cross-org automáticamente vía el
+  servicio de discovery del peer conectado (usa los anchor peers configurados en el
+  paso 2) — alcanza con conectarse al peer de la propia org.
 
 ## Fuera de alcance (etapa 1)
 
