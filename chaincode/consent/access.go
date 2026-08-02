@@ -81,35 +81,51 @@ func (s *SmartContract) CheckAccess(ctx contractapi.TransactionContextInterface,
 	}
 	now := txTimestamp.AsTime()
 
+	// Primer filtro: la org tiene que estar habilitada en el bus. Una clínica
+	// dada de baja puede seguir teniendo consentimientos viejos sin revocar (o
+	// carreras entre la revocación y la baja de membresía), y sin este chequeo
+	// alcanzaría con que su peer siguiera en pie para obtener un PERMIT. Se
+	// resuelve como DENY y no como error para que quede el rastro en la
+	// auditoría: un intento de acceso de una institución dada de baja es
+	// justamente lo que interesa poder demostrar después.
+	requesterActiva, err := isClinicActive(ctx, requesterOrg)
+	if err != nil {
+		return "", err
+	}
+
 	decision := DecisionDeny
 	reason := "no existe consentimiento"
 
-	consentJSON, err := ctx.GetStub().GetState(consentKey(patientIDHash, requesterOrg))
-	if err != nil {
-		return "", fmt.Errorf("error leyendo world state: %v", err)
-	}
-
-	if consentJSON != nil {
-		var consentRecord Consent
-		if err := json.Unmarshal(consentJSON, &consentRecord); err != nil {
-			return "", err
-		}
-
-		expiry, err := time.Parse(time.RFC3339, consentRecord.Expiry)
+	if !requesterActiva {
+		reason = "organización no habilitada en el bus (no registrada o dada de baja)"
+	} else {
+		consentJSON, err := ctx.GetStub().GetState(consentKey(patientIDHash, requesterOrg))
 		if err != nil {
-			return "", fmt.Errorf("expiry de consentimiento corrupto: %v", err)
+			return "", fmt.Errorf("error leyendo world state: %v", err)
 		}
 
-		switch {
-		case consentRecord.Revoked:
-			reason = "consentimiento revocado"
-		case !now.Before(expiry):
-			reason = "consentimiento vencido"
-		case !containsString(consentRecord.ResourceTypes, resourceType):
-			reason = "resource type no autorizado por el consentimiento"
-		default:
-			decision = DecisionPermit
-			reason = ""
+		if consentJSON != nil {
+			var consentRecord Consent
+			if err := json.Unmarshal(consentJSON, &consentRecord); err != nil {
+				return "", err
+			}
+
+			expiry, err := time.Parse(time.RFC3339, consentRecord.Expiry)
+			if err != nil {
+				return "", fmt.Errorf("expiry de consentimiento corrupto: %v", err)
+			}
+
+			switch {
+			case consentRecord.Revoked:
+				reason = "consentimiento revocado"
+			case !now.Before(expiry):
+				reason = "consentimiento vencido"
+			case !containsString(consentRecord.ResourceTypes, resourceType):
+				reason = "resource type no autorizado por el consentimiento"
+			default:
+				decision = DecisionPermit
+				reason = ""
+			}
 		}
 	}
 

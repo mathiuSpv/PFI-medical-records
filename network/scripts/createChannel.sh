@@ -22,8 +22,13 @@ MAX_RETRY=5
 mkdir -p "${NETWORK_HOME}/channel-artifacts"
 BLOCKFILE="${NETWORK_HOME}/channel-artifacts/${CHANNEL_NAME}.block"
 
+# CONFIGTX_DIR permite crear un canal cuyo perfil no está en el configtx.yaml
+# principal: el canal privado de una clínica dada de alta en caliente vive en
+# configtx/generated/<key>/ (ver scripts/addOrg.sh).
+CONFIGTX_DIR=${CONFIGTX_DIR:-${NETWORK_HOME}/configtx}
+
 infoln "Generando bloque de génesis de '${CHANNEL_NAME}' (perfil ${PROFILE})"
-FABRIC_CFG_PATH=${NETWORK_HOME}/configtx configtxgen -profile "${PROFILE}" -outputBlock "${BLOCKFILE}" -channelID "${CHANNEL_NAME}"
+FABRIC_CFG_PATH=${CONFIGTX_DIR} configtxgen -profile "${PROFILE}" -outputBlock "${BLOCKFILE}" -channelID "${CHANNEL_NAME}"
 
 joinOrderer() {
   local rc=1 counter=1 res=1
@@ -59,37 +64,6 @@ joinPeer() {
   verifyResult $res "peer0.${org} no pudo unirse al canal '${CHANNEL_NAME}'"
 }
 
-setAnchorPeer() {
-  local org=$1
-  setGlobals "$org"
-  local host_port
-  host_port=$(peerHost "$org")
-  local host=${host_port%%:*}
-  local port=${host_port##*:}
-
-  infoln "Actualizando anchor peer de ${CORE_PEER_LOCALMSPID} en '${CHANNEL_NAME}'"
-  fetchChannelConfig "$org" "${CHANNEL_NAME}" "${NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}config.json"
-
-  jq '.channel_group.groups.Application.groups.'"${CORE_PEER_LOCALMSPID}"'.values += {"AnchorPeers":{"mod_policy": "Admins","value":{"anchor_peers": [{"host": "'"${host}"'","port": '"${port}"'}]},"version": "0"}}' \
-    "${NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}config.json" \
-    > "${NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}modified_config.json"
-
-  createConfigUpdate "${CHANNEL_NAME}" \
-    "${NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}config.json" \
-    "${NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}modified_config.json" \
-    "${NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}anchors.tx"
-
-  set +e
-  peer channel update -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
-    -c "${CHANNEL_NAME}" -f "${NETWORK_HOME}/channel-artifacts/${CORE_PEER_LOCALMSPID}anchors.tx" \
-    --tls --cafile "$ORDERER_CA" >/tmp/anchor.log 2>&1
-  res=$?
-  set -e
-  cat /tmp/anchor.log
-  verifyResult $res "No se pudo fijar el anchor peer de ${CORE_PEER_LOCALMSPID} en '${CHANNEL_NAME}'"
-  successln "Anchor peer fijado para ${CORE_PEER_LOCALMSPID} en '${CHANNEL_NAME}'"
-}
-
 infoln "Uniendo el orderer al canal '${CHANNEL_NAME}'"
 joinOrderer
 
@@ -99,7 +73,7 @@ for org in "${MEMBER_ORGS[@]}"; do
 done
 
 for org in "${MEMBER_ORGS[@]}"; do
-  setAnchorPeer "$org"
+  setAnchorPeerFor "$org" "${CHANNEL_NAME}"
 done
 
 successln "Canal '${CHANNEL_NAME}' listo (miembros: ${MEMBER_ORGS[*]})"

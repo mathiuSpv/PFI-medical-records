@@ -176,6 +176,54 @@ plan original).
       → decrypt como destinataria / rechazo a la org equivocada → revoke → DENY) y
       `npm run demo` del paso 5 sigue verde con el chaincode extendido.
 
+## Extra — Alta y baja de instituciones (`network/scripts/addOrg.sh`, `removeOrg.sh`)
+
+Incorporar y sacar clínicas con la red andando, como organizaciones Fabric reales y no
+como filas de una tabla. Post-etapa-1 (no estaba en el plan original).
+
+- [x] Registro de clínicas (`network/organizations/clinics.json`, `scripts/orgRegistry.sh`):
+      fuente de verdad de qué orgs existen, con qué MSP y en qué puertos. Reemplaza el
+      cableado a dos orgs que había en `envVar.sh` (if/elif), `deployChaincode.sh`,
+      `application/src/config.js` y el front.
+- [x] `envVar.sh` resuelve `setGlobals`/`peerHost`/`peerCA` desde el registro; nuevo
+      `peerAddressArgs` para los invokes que necesitan endorsement de N orgs.
+- [x] Plantillas renderizadas por alta: `crypto-config/clinic.template.yaml`,
+      `compose/compose-clinic.template.yaml` y `configtx/clinic.template.yaml` (esta
+      última con rutas absolutas: vive en un subdirectorio generado y las relativas
+      romperían el MSPDir en silencio).
+- [x] `configUpdate.sh`: `applyConfigUpdate` (firma con N-1 orgs y envía con la última —
+      `peer channel update` agrega la del emisor, firmar con todas duplicaría identidad),
+      `modifyChannelConfig` y `setAnchorPeerFor` (extraído de `createChannel.sh`, que
+      ahora lo reusa).
+- [x] `addOrg.sh`: cryptogen → `-printOrg` → config update de `canal-universal` firmado
+      por las existentes → peer → join + anchor → canal privado → install/approve del
+      chaincode → `RegisterClinic`. Probado: la org nueva endosa y opera (DENY sin
+      consentimiento → grant → PERMIT).
+- [x] `removeOrg.sh`: revoca los consentimientos hacia la saliente → `DeactivateClinic` →
+      config update que la saca → peer abajo. Los activos y la auditoría que generó
+      **quedan** en el ledger.
+- [x] Chaincode `clinic.go`: `RegisterClinic` / `DeactivateClinic` / `GetClinic` /
+      `GetAllClinics` / `GetClinicHistory`, eventos `ClinicRegistered` y
+      `ClinicDeactivated`. `CheckAccess` deniega a las orgs no activas (como DENY
+      registrado, no como error: el intento de una institución dada de baja es
+      justamente lo que interesa poder auditar); `EmitAsset` y `GrantConsent` las
+      rechazan. `deployChaincode.sh` registra las fundadoras al desplegar.
+- [x] BFF: `GET/POST /api/clinics`, `POST /api/clinics/:key/baja`, progreso por SSE.
+      Los scripts se lanzan con `spawn` y argumentos como array (nunca shell), con el
+      `key` validado contra la misma regex que usa el script. Un alta/baja a la vez
+      (dos config updates concurrentes se pisan por versión).
+- [x] Front: panel "Instituciones del bus" (alta, baja con motivo, estado local vs
+      on-chain vs salud del nodo, log de progreso), topología SVG calculada para N
+      clínicas con `canal-universal` como bus, selector de org dinámico y destinatario
+      del consentimiento por `select`.
+- [x] Verificado de punta a punta por CLI y por el dashboard: alta → la nueva opera →
+      baja → queda `BAJA` on-chain con autor y motivo, fuera de la config del canal, y
+      con su historial alta/baja íntegro. `network.sh down/up/createChannels/deployCC`
+      desde cero y `npm run demo` siguen verdes.
+
+Limitación conocida: no se puede reusar el `key` de una clínica dada de baja (su canal
+privado sigue creado en el orderer). Se rechaza con un mensaje explícito.
+
 ## Fuera de alcance (etapa 1)
 
 IPFS distribuido/pinning externo, modelado FHIR completo, HSM/gestión avanzada de claves.
