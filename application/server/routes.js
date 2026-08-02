@@ -8,7 +8,12 @@
 'use strict';
 
 const express = require('express');
-const fabric = require('./fabric');
+
+const { evaluateJSON, defaultOrgKey } = require('./connections');
+const actions = require('./actions');
+const clinics = require('./clinics');
+const health = require('./health');
+const keys = require('./keys');
 
 const wrap = (handler) => async (req, res) => {
   try {
@@ -24,33 +29,33 @@ module.exports = function buildRoutes(broadcast) {
 
   // Sin org explícita se usa la primera clínica activa: ya no se puede asumir
   // que 'sancristobal' existe, porque podría estar dada de baja.
-  const orgOrDefault = (req) => req.query.org || req.body?.org || fabric.defaultOrgKey();
+  const orgOrDefault = (req) => req.query.org || req.body?.org || defaultOrgKey();
 
-  router.get('/status', wrap(() => fabric.nodesStatus()));
-  router.get('/channels', wrap((req) => fabric.channelsStatus(orgOrDefault(req))));
+  router.get('/status', wrap(() => health.nodesStatus()));
+  router.get('/channels', wrap((req) => health.channelsStatus(orgOrDefault(req))));
 
-  router.get('/clinics', wrap(() => fabric.listClinics()));
-  router.post('/clinics', wrap((req) => fabric.addClinic(req.body, broadcast)));
+  router.get('/clinics', wrap(() => clinics.listClinics()));
+  router.post('/clinics', wrap((req) => clinics.addClinic(req.body, broadcast)));
   router.post('/clinics/:key/baja', wrap((req) =>
-    fabric.removeClinic({ key: req.params.key, motivo: req.body?.motivo }, broadcast)));
+    clinics.removeClinic({ key: req.params.key, motivo: req.body?.motivo }, broadcast)));
   router.get('/clinics/:mspId/history', wrap((req) =>
-    fabric.evaluateJSON(orgOrDefault(req), 'GetClinicHistory', req.params.mspId)));
+    evaluateJSON(orgOrDefault(req), 'GetClinicHistory', req.params.mspId)));
 
-  router.get('/assets', wrap((req) => fabric.evaluateJSON(orgOrDefault(req), 'GetAllAssets')));
-  router.get('/consents', wrap((req) => fabric.evaluateJSON(orgOrDefault(req), 'GetAllConsents')));
-  router.get('/access-logs', wrap((req) => fabric.evaluateJSON(orgOrDefault(req), 'GetAllAccessLogs')));
+  router.get('/assets', wrap((req) => evaluateJSON(orgOrDefault(req), 'GetAllAssets')));
+  router.get('/consents', wrap((req) => evaluateJSON(orgOrDefault(req), 'GetAllConsents')));
+  router.get('/access-logs', wrap((req) => evaluateJSON(orgOrDefault(req), 'GetAllAccessLogs')));
   router.get('/consents/history', wrap((req) => {
     const { patientIDHash, grantedToOrg } = req.query;
-    return fabric.evaluateJSON(orgOrDefault(req), 'GetConsentHistory', patientIDHash, grantedToOrg);
+    return evaluateJSON(orgOrDefault(req), 'GetConsentHistory', patientIDHash, grantedToOrg);
   }));
 
-  router.get('/deliveries', wrap(() => fabric.deliveries));
+  router.get('/deliveries', wrap(() => keys.deliveries));
 
-  router.post('/assets', wrap((req) => fabric.emitAsset(req.body)));
-  router.post('/consents', wrap((req) => fabric.grantConsent(req.body)));
-  router.post('/consents/revoke', wrap((req) => fabric.revokeConsent(req.body)));
-  router.post('/check-access', wrap((req) => fabric.checkAccess(req.body)));
-  router.post('/deliveries/:id/decrypt', wrap((req) => fabric.decryptDelivery(req.params.id, req.body.org)));
+  router.post('/assets', wrap((req) => actions.emitAsset(req.body)));
+  router.post('/consents', wrap((req) => actions.grantConsent(req.body)));
+  router.post('/consents/revoke', wrap((req) => actions.revokeConsent(req.body)));
+  router.post('/check-access', wrap((req) => actions.checkAccess(req.body)));
+  router.post('/deliveries/:id/decrypt', wrap((req) => keys.decryptDelivery(req.params.id, req.body.org)));
 
   return router;
 };
