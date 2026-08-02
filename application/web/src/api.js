@@ -13,7 +13,10 @@ const COLOR_FUNDADORAS = {
   sancristobal: 'var(--sc)',
   montenegro: 'var(--mn)',
 };
-const PALETA = ['#c88cff', '#f0b429', '#ff8f6b', '#4dd6c1', '#ff6bb5', '#9aa8ff'];
+// Tonos medios, no pasteles: estos colores se usan como texto (el nombre de la
+// institución en tablas y feed) sobre fondo blanco, así que todos tienen que
+// pasar 4.5:1. Se evitan el azul y el verde de las fundadoras.
+const PALETA = ['#7b3fc4', '#a04a12', '#b3336b', '#0f6f86', '#5d4bbf', '#7a5c00'];
 
 export function colorFor(key) {
   if (COLOR_FUNDADORAS[key]) return COLOR_FUNDADORAS[key];
