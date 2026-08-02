@@ -580,8 +580,10 @@ network/             Red Fabric propia: configtx.yaml, docker-compose, scripts (
 network/scripts/     network.sh y helpers; addOrg.sh / removeOrg.sh (alta y baja de clínicas)
 network/*/…template… Plantillas que se renderizan una vez por clínica dada de alta
 chaincode/           Chaincode Go: consentimiento + ABAC + auditoría + registro de clínicas
+chaincode/consent/*_test.go   Suite de tests (go test ./consent/), world state en memoria
 application/src/     Cliente por org: cifrado, IPFS, eventos, entrega de clave (paso 5)
 application/server/  BFF Express del dashboard: REST + SSE sobre los módulos de src/
+                     connections · actions · keys · clinics · health · listener · routes
 application/web/     Dashboard React (Vite): topología, acciones, tablas, feed en vivo
 ```
 
