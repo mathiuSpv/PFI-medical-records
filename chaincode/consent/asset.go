@@ -74,15 +74,15 @@ func (s *SmartContract) EmitAsset(ctx contractapi.TransactionContextInterface, f
 	return ctx.GetStub().PutState(key, assetJSON)
 }
 
-// GetAsset devuelve los metadatos de un recurso. Query de solo lectura (no
-// genera transacción si se invoca con `peer chaincode query`).
-func (s *SmartContract) GetAsset(ctx contractapi.TransactionContextInterface, fhirResourceID string) (*Asset, error) {
+// readAsset devuelve el activo, o nil si no está emitido. Lo usa CheckAccess,
+// que necesita distinguir "no existe" de un error de lectura.
+func readAsset(ctx contractapi.TransactionContextInterface, fhirResourceID string) (*Asset, error) {
 	assetJSON, err := ctx.GetStub().GetState(assetKey(fhirResourceID))
 	if err != nil {
 		return nil, fmt.Errorf("error leyendo world state: %v", err)
 	}
 	if assetJSON == nil {
-		return nil, fmt.Errorf("el activo %s no existe", fhirResourceID)
+		return nil, nil
 	}
 
 	var asset Asset
@@ -90,6 +90,19 @@ func (s *SmartContract) GetAsset(ctx contractapi.TransactionContextInterface, fh
 		return nil, err
 	}
 	return &asset, nil
+}
+
+// GetAsset devuelve los metadatos de un recurso. Query de solo lectura (no
+// genera transacción si se invoca con `peer chaincode query`).
+func (s *SmartContract) GetAsset(ctx contractapi.TransactionContextInterface, fhirResourceID string) (*Asset, error) {
+	asset, err := readAsset(ctx, fhirResourceID)
+	if err != nil {
+		return nil, err
+	}
+	if asset == nil {
+		return nil, fmt.Errorf("el activo %s no existe", fhirResourceID)
+	}
+	return asset, nil
 }
 
 // GetAllAssets devuelve todos los activos emitidos. Query de solo lectura.

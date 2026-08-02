@@ -3,7 +3,7 @@
 // en claro (p.ej. "paciente-demo-001") y el backend lo hashea (SHA-256) —
 // on-chain solo viaja el hash.
 import { useEffect, useState } from 'react';
-import { api, clinicByKey } from '../api.js';
+import { api, clinicByKey, orgByMsp, shortHash, useFetch } from '../api.js';
 
 const RESOURCE_TYPES = ['Observation', 'MedicationRequest', 'DiagnosticReport', 'Condition'];
 
@@ -26,7 +26,7 @@ function defaultExpiry() {
   return d.toISOString().slice(0, 10);
 }
 
-export default function ActionsPanel({ org, clinics, onDone }) {
+export default function ActionsPanel({ org, clinics, tick, onDone }) {
   const [tab, setTab] = useState('emitir');
   const [patientId, setPatientId] = useState('paciente-demo-001');
   const [resourceType, setResourceType] = useState('Observation');
@@ -48,6 +48,18 @@ export default function ActionsPanel({ org, clinics, onDone }) {
 
   const yo = clinicByKey(org) ?? { label: org, color: 'var(--muted)' };
   const other = clinicByKey(targetKey);
+
+  // El acceso se pide por recurso concreto, no por tipo: el paciente y el tipo
+  // los deriva el chaincode del activo. Por eso acá hace falta la lista de
+  // activos emitidos y no alcanza con un combo de tipos.
+  const { data: assets } = useFetch('/assets', { deps: [tick] });
+  const [assetId, setAssetId] = useState('');
+  useEffect(() => {
+    if (!assets) return;
+    if (!assets.some((a) => a.FhirResourceID === assetId)) {
+      setAssetId(assets[0]?.FhirResourceID ?? '');
+    }
+  }, [assets, assetId]);
 
   const run = async (label, fn) => {
     setBusy(true);
@@ -86,7 +98,7 @@ export default function ActionsPanel({ org, clinics, onDone }) {
     resourceTypes: total ? [] : grantTypes,
   }));
 
-  const pedirAcceso = () => run('CheckAccess', () => api('/check-access', { org, resourceType, patientId }));
+  const pedirAcceso = () => run('CheckAccess', () => api('/check-access', { org, fhirResourceID: assetId }));
 
   return (
     <section className="panel">
@@ -106,10 +118,14 @@ export default function ActionsPanel({ org, clinics, onDone }) {
       </div>
 
       <div className="form">
-        <label>
-          Paciente (se hashea antes de ir al ledger)
-          <input value={patientId} onChange={(e) => setPatientId(e.target.value)} />
-        </label>
+        {/* En "Pedir acceso" el paciente no se ingresa: sale del activo elegido.
+            Mostrar el campo igual sería un control que no hace nada. */}
+        {tab !== 'acceder' && (
+          <label>
+            Paciente (va al ledger como referencia opaca, HMAC con clave de red)
+            <input value={patientId} onChange={(e) => setPatientId(e.target.value)} />
+          </label>
+        )}
 
         {tab === 'emitir' && (
           <>
@@ -158,14 +174,24 @@ export default function ActionsPanel({ org, clinics, onDone }) {
         {tab === 'acceder' && (
           <>
             <label>
-              Tipo de recurso solicitado
-              <select value={resourceType} onChange={(e) => setResourceType(e.target.value)}>
-                {RESOURCE_TYPES.map((t) => <option key={t}>{t}</option>)}
+              Recurso solicitado
+              <select value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={!assets?.length}>
+                {assets?.map((a) => (
+                  <option key={a.FhirResourceID} value={a.FhirResourceID}>
+                    {a.FhirResourceID} · {a.ResourceType} · paciente {shortHash(a.PatientIDHash, 8)} · {orgByMsp(a.OwnerOrg).label}
+                  </option>
+                ))}
               </select>
+              <span className="hint">
+                el tipo y el paciente los toma el chaincode del activo, no se declaran acá
+              </span>
             </label>
-            <button className="primary" disabled={busy} onClick={pedirAcceso}>
+            <button className="primary" disabled={busy || !assetId} onClick={pedirAcceso}>
               Pedir acceso (CheckAccess on-chain)
             </button>
+            {assets?.length === 0 && (
+              <div className="result pending">No hay activos emitidos todavía: emití uno primero.</div>
+            )}
           </>
         )}
 

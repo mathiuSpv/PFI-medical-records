@@ -1,5 +1,6 @@
 // Auditoría de accesos: cada CheckAccess (PERMIT o DENY) queda en el ledger
-// con su motivo — nada se evalúa sin dejar rastro.
+// con su motivo y con el recurso puntual que se pidió — nada se evalúa sin
+// dejar rastro, y el rastro dice CUÁL recurso, no solo de qué tipo era.
 import { orgByMsp, shortHash, useFetch } from '../api.js';
 
 export default function AccessLogPanel({ tick }) {
@@ -15,7 +16,7 @@ export default function AccessLogPanel({ tick }) {
       {error && <div className="result error">{error}</div>}
       <table>
         <thead>
-          <tr><th>Fecha</th><th>Solicitante</th><th>Tipo</th><th>Paciente (hash)</th><th>Decisión</th><th>Motivo</th><th>Tx</th></tr>
+          <tr><th>Fecha</th><th>Solicitante</th><th>Recurso</th><th>Tipo</th><th>Paciente (ref)</th><th>Decisión</th><th>Motivo</th><th>Tx</th></tr>
         </thead>
         <tbody>
           {sorted?.map((l) => {
@@ -24,6 +25,7 @@ export default function AccessLogPanel({ tick }) {
               <tr key={l.TxID}>
                 <td className="muted">{l.Timestamp}</td>
                 <td><span className="org-badge" style={{ color: req.color }}>{req.label}</span></td>
+                <td><code>{l.FhirResourceID || '—'}</code></td>
                 <td>{l.ResourceType}</td>
                 <td><code title={l.PatientIDHash}>{shortHash(l.PatientIDHash)}</code></td>
                 <td><span className={`badge ${l.Decision === 'PERMIT' ? 'permit' : 'deny'}`}>{l.Decision}</span></td>
@@ -32,7 +34,7 @@ export default function AccessLogPanel({ tick }) {
               </tr>
             );
           })}
-          {sorted?.length === 0 && <tr><td colSpan="7" className="empty">Sin evaluaciones de acceso todavía.</td></tr>}
+          {sorted?.length === 0 && <tr><td colSpan="8" className="empty">Sin evaluaciones de acceso todavía.</td></tr>}
         </tbody>
       </table>
     </section>

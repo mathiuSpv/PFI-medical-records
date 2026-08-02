@@ -102,9 +102,10 @@ export default function EventFeed({ feed }) {
               <div className="feed-title">⚡ {item.eventName} <span className="muted">{fmtTs(item.receivedAt)}</span></div>
               <div className="feed-body">
                 <span className="org-badge" style={{ color: req.color }}>{req.label}</span>
-                {' obtuvo PERMIT sobre '}{item.resourceType}
+                {' obtuvo PERMIT sobre '}<code>{item.fhirResourceID}</code>
                 <div className="muted">
-                  paciente <code title={item.patientIDHash}>{shortHash(item.patientIDHash)}</code>
+                  {item.resourceType}
+                  {' · paciente '}<code title={item.patientIDHash}>{shortHash(item.patientIDHash)}</code>
                   {' · bloque '}{item.blockNumber}
                   {' · tx '}<code title={item.txId}>{shortHash(item.txId, 8)}</code>
                 </div>

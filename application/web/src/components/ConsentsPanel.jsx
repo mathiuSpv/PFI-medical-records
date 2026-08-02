@@ -39,7 +39,7 @@ export default function ConsentsPanel({ tick }) {
       {error && <div className="result error">{error}</div>}
       <table>
         <thead>
-          <tr><th>Paciente (hash)</th><th>Otorgado por</th><th>Otorgado a</th><th>Resource types</th><th>Vence</th><th>Estado</th><th></th></tr>
+          <tr><th>Paciente (ref)</th><th>Otorgado por</th><th>Otorgado a</th><th>Resource types</th><th>Vence</th><th>Estado</th><th></th></tr>
         </thead>
         <tbody>
           {consents?.map((c) => {

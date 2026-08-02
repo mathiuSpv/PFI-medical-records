@@ -79,7 +79,7 @@ export default function App() {
         <div className="main-col">
           <TopologyPanel org={org} clinics={activas} tick={tick} />
           <ClinicsPanel clinics={clinics} onChanged={() => { reloadClinics(); bump(); }} />
-          {org && <ActionsPanel org={org} clinics={activas} onDone={bump} />}
+          {org && <ActionsPanel org={org} clinics={activas} tick={tick} onDone={bump} />}
           <AssetsPanel tick={tick} />
           <ConsentsPanel tick={tick} />
           <AccessLogPanel tick={tick} />

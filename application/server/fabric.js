@@ -25,6 +25,7 @@ const { newGatewayForOrg } = require('../src/connect');
 const { listenForEvents } = require('../src/events');
 const { encryptResource, decryptResource, wrapKeyForRecipient, unwrapKey } = require('../src/crypto');
 const { uploadToIPFS, downloadFromIPFS } = require('../src/ipfs');
+const { patientRef } = require('../src/patient');
 const {
   NETWORK_HOME,
   getOrgs,
@@ -94,9 +95,13 @@ function defaultOrgKey() {
 // Estado en memoria del prototipo
 // ---------------------------------------------------------------------------
 
-// keyStore: `${patientIDHash}:${resourceType}` -> { aesKey, ownerOrgKey, ... }
-// (mismo índice compuesto que usa el evento AccessPermitted para resolver
-// qué clave entregar — el evento no trae el fhirResourceID).
+// keyStore: fhirResourceID -> { aesKey, ownerOrgKey, ... }
+//
+// Indexado por recurso, no por `${paciente}:${tipo}` como antes: con dos
+// Observations del mismo paciente la clave de la segunda sobreescribía a la de
+// la primera y la entrega podía terminar envolviendo la clave equivocada.
+// Ahora el evento AccessPermitted trae el FhirResourceID, así que se puede
+// resolver la clave exacta del recurso que se autorizó.
 const keyStore = new Map();
 
 // deliveries: sobres de clave envueltos tras cada PERMIT (sin la clave en claro).
@@ -106,9 +111,12 @@ const deliveries = [];
 // Acciones
 // ---------------------------------------------------------------------------
 
+// El identificador del paciente nunca sale de acá en claro ni como hash simple:
+// se convierte en una referencia opaca con HMAC y clave de red (ver
+// ../src/patient.js, que explica por qué un SHA-256 pelado no alcanza).
 function resolvePatientIDHash({ patientId, patientIDHash }) {
   if (patientIDHash) return patientIDHash;
-  if (patientId) return crypto.createHash('sha256').update(patientId).digest('hex');
+  if (patientId) return patientRef(patientId);
   throw new Error('Falta patientId o patientIDHash');
 }
 
@@ -121,7 +129,7 @@ async function emitAsset({ org, patientId, resourceType, resource }) {
   const { contract, mspId } = await getConn(org);
   await contract.submitTransaction('EmitAsset', fhirResourceID, resourceType, cid, patientIDHash);
 
-  keyStore.set(`${patientIDHash}:${resourceType}`, {
+  keyStore.set(fhirResourceID, {
     aesKey,
     ownerOrgKey: org,
     ownerMspId: mspId,
@@ -151,11 +159,14 @@ async function revokeConsent({ org, grantedToOrg, patientId, patientIDHash, reso
 // checkAccess usa submitAsync (no submitTransaction) para conocer el txId y,
 // tras el commit, leer el AccessLog de esa misma tx — así la respuesta trae
 // el motivo del DENY además de la decisión.
-async function checkAccess({ org, resourceType, patientId, patientIDHash }) {
-  const hash = resolvePatientIDHash({ patientId, patientIDHash });
+// El acceso se pide por recurso concreto. El tipo y el paciente los deriva el
+// chaincode del activo, así que no hace falta (ni conviene) mandarlos: la
+// respuesta los devuelve leídos del AccessLog, que es lo que quedó auditado.
+async function checkAccess({ org, fhirResourceID }) {
+  if (!fhirResourceID) throw new Error('Falta fhirResourceID');
   const { contract } = await getConn(org);
 
-  const commit = await contract.submitAsync('CheckAccess', { arguments: [resourceType, hash] });
+  const commit = await contract.submitAsync('CheckAccess', { arguments: [fhirResourceID] });
   const decision = utf8(commit.getResult());
   const txId = commit.getTransactionId();
 
@@ -165,7 +176,14 @@ async function checkAccess({ org, resourceType, patientId, patientIDHash }) {
   }
 
   const log = await evaluateJSON(org, 'GetAccessLog', txId);
-  return { decision, reason: log.Reason, txId, patientIDHash: hash };
+  return {
+    decision,
+    reason: log.Reason,
+    txId,
+    fhirResourceID,
+    resourceType: log.ResourceType,
+    patientIDHash: log.PatientIDHash,
+  };
 }
 
 async function decryptDelivery(deliveryId, orgKey) {
@@ -419,12 +437,13 @@ async function startEventListener(broadcast) {
           txId: payload.TxID,
           blockNumber: String(event.blockNumber),
           requesterOrg: payload.RequesterOrg,
+          fhirResourceID: payload.FhirResourceID,
           resourceType: payload.ResourceType,
           patientIDHash: payload.PatientIDHash,
           timestamp: payload.Timestamp,
         });
 
-        const entry = keyStore.get(`${payload.PatientIDHash}:${payload.ResourceType}`);
+        const entry = keyStore.get(payload.FhirResourceID);
         if (!entry || payload.RequesterOrg === entry.ownerMspId) return;
 
         const envelope = wrapKeyForRecipient(entry.aesKey, payload.RequesterCertPEM);

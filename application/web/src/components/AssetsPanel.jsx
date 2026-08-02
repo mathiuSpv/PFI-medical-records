@@ -14,7 +14,7 @@ export default function AssetsPanel({ tick }) {
       {error && <div className="result error">{error}</div>}
       <table>
         <thead>
-          <tr><th>ID</th><th>Tipo</th><th>CID (IPFS)</th><th>Paciente (hash)</th><th>Emisor</th><th>Fecha</th></tr>
+          <tr><th>ID</th><th>Tipo</th><th>CID (IPFS)</th><th>Paciente (ref)</th><th>Emisor</th><th>Fecha</th></tr>
         </thead>
         <tbody>
           {assets?.map((a) => {
