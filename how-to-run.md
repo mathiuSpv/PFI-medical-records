@@ -108,6 +108,12 @@ on-chain e IPFS persisten mientras la red siga arriba).
   confía en el repo porque el bind mount lo deja con otro dueño (pasa clonando en
   Windows). Dentro del contenedor:
   `git config --global --add safe.directory /workspaces/pfi-medical-records`.
-- **Editás el front y el navegador no cambia** → sobre bind mounts de Windows el watcher
-  de Vite no recibe los eventos de inotify. Reiniciar `npm run dev`, o agregar
-  `server: { watch: { usePolling: true } }` en `web/vite.config.js`.
+- **Editás el front y el navegador no cambia** → son dos causas distintas y conviene
+  descartar las dos:
+  1. Sobre el bind mount de un devcontainer en Windows los eventos de inotify no
+     llegan, así que HMR nunca dispara. Arrancar con `VITE_POLLING=1 npm run dev`.
+  2. Quedó un Vite viejo corriendo. `pkill -f vite` **no** sirve: el cmdline del propio
+     shell contiene "vite", así que pkill se mata a sí mismo antes de llegar al resto y
+     el server viejo sobrevive. Con `strictPort` ahora el nuevo falla en vez de mudarse
+     de puerto en silencio, pero para matarlo:
+     `ps -eo pid,args | awk '/node_modules\/\.bin\/vite/ {print $1}' | xargs -r kill`

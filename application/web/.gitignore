@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# Cache del hook de diseño (skill impeccable), no es del proyecto.
+.impeccable/
