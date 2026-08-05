@@ -6,7 +6,7 @@
 
 const express = require('express');
 const buildRoutes = require('./routes');
-const { startEventListener } = require('./fabric');
+const { startEventListener } = require('./listener');
 
 const PORT = process.env.PORT || 3001;
 
