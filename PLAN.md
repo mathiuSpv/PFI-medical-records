@@ -261,6 +261,49 @@ objetivos específicos. Post-etapa-1.
       perdido buscando un bug que no existe) y `watch.usePolling` opt-in por
       `VITE_POLLING=1` para los bind mounts de Windows, donde inotify no llega.
 
+## Extra — Tests del chaincode y modularización del BFF
+
+- [x] **Suite de tests del chaincode** (`chaincode/consent/*_test.go`, 22 casos,
+      `go test ./consent/`). Mocks de counterfeiter tomados de
+      `fabric-samples/asset-transfer-basic` —mismas versiones de las libs— más un doble
+      de `cid.ClientIdentity` escrito a mano: la interfaz tiene cinco métodos, el
+      chaincode usa dos, y un fake generado de 300 líneas sería peor de leer. Sin
+      testify: la stdlib alcanza y el chaincode se vendoriza, así que cada dependencia
+      nueva hay que arrastrarla.
+
+      El harness monta un world state en memoria detrás de los mocks, de modo que los
+      tests se escriben como el flujo real (emitir → otorgar → pedir acceso) en vez de
+      programar retornos método por método. Casi todos se distinguen por **quién firma**,
+      que es de donde sale toda la autorización del chaincode.
+
+      Cubre las afirmaciones que la tesis hace sobre el comportamiento del bus: deny por
+      defecto, alcance del consentimiento por tipo y por paciente, vencimiento,
+      revocación total y parcial, que solo el otorgante revoca, que una institución dada
+      de baja no accede aunque le quede consentimiento vigente, que su intento igual
+      queda auditado, que el tipo y el paciente se derivan del activo, que cada
+      evaluación deja su propio registro, y el arranque en frío del registro de clínicas.
+
+      **Validada por mutación**, que es lo que distingue una suite con dientes de una
+      decorativa: desactivar el gate de institución no habilitada, ignorar la revocación
+      y aceptar el tipo declarado en vez del del activo hacen fallar cada uno al test que
+      les corresponde.
+
+- [x] **`server/fabric.js` partido en módulos.** Eran 550 líneas con cinco
+      responsabilidades sin relación. Quedó en: `connections.js` (gateways por org, 60),
+      `actions.js` (las cuatro operaciones del bus, 88), `keys.js` (claves AES y entregas,
+      87), `clinics.js` (alta/baja, 196), `health.js` (sondas y altura de canales, 60),
+      `listener.js` (eventos → feed y entrega de clave, 73). El monolito se eliminó y
+      `routes.js` importa de cada módulo, que además deja explícito qué toca cada ruta.
+
+      Lo que más gana es `clinics.js`: es el único módulo que ejecuta procesos, y sus
+      argumentos llegan por HTTP. Tenerlo aislado con su validación al lado es mejor que
+      enterrado entre 550 líneas.
+
+      El chaincode **no** se partió en varios contratos: `contractapi.NewChaincode()`
+      acepta varios, pero los invokes pasarían a llamarse `ConsentContract:GrantConsent`
+      y romperían la app, el README y todos los ejemplos de CLI. El split por área que ya
+      tiene (asset / consent / access / clinic / util) es la granularidad correcta.
+
 ## Fuera de alcance (etapa 1)
 
 IPFS distribuido/pinning externo, modelado FHIR completo, HSM/gestión avanzada de claves.

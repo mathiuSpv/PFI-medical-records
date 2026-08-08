@@ -81,6 +81,14 @@ El alta crea una organización Fabric real (MSP y peer propios) y la incorpora a
 la baja hace el camino inverso. El detalle de cada paso está en el
 [README § Alta y baja de instituciones](README.md#alta-y-baja-de-instituciones).
 
+## 4c. Correr los tests del chaincode
+
+No necesitan la red levantada: corren contra un world state en memoria.
+
+```bash
+cd chaincode && go test ./consent/ -v
+```
+
 ## 5. Bajar todo
 
 ```bash
