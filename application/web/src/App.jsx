@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, useClinics, useSSE } from './api.js';
+import { api, esGenerico, idDeRuta, setGenerico, useClinics, useRuta, useSSE } from './api.js';
 import TopologyPanel from './components/TopologyPanel.jsx';
 import ActionsPanel from './components/ActionsPanel.jsx';
 import ClinicsPanel from './components/ClinicsPanel.jsx';
@@ -7,6 +7,9 @@ import AssetsPanel from './components/AssetsPanel.jsx';
 import ConsentsPanel from './components/ConsentsPanel.jsx';
 import AccessLogPanel from './components/AccessLogPanel.jsx';
 import EventFeed from './components/EventFeed.jsx';
+import GraphPanel from './components/GraphPanel.jsx';
+import AbmPanel from './components/AbmPanel.jsx';
+import AssetPage from './components/AssetPage.jsx';
 
 export default function App() {
   const { clinics, reload: reloadClinics } = useClinics();
@@ -20,7 +23,25 @@ export default function App() {
   // (tras cada acción propia y ante cada evento SSE).
   const [tick, setTick] = useState(0);
   const [feed, setFeed] = useState([]);
+  const [solapa, setSolapa] = useState('operacion');
   const bump = () => setTick((t) => t + 1);
+
+  // Ruta por hash: '#/activo/<id>' abre la página del documento, cualquier otra
+  // cosa es el dashboard.
+  const activoId = idDeRuta(useRuta());
+
+  // Modo genérico: enmascara los nombres de las instituciones en toda la UI.
+  // El estado real vive en api.js (y en localStorage); acá se replica solo para
+  // que React redibuje, y se recarga el listado para que las etiquetas nuevas
+  // lleguen a los paneles.
+  const [generico, setGen] = useState(esGenerico());
+  const toggleGenerico = () => {
+    const valor = !generico;
+    setGenerico(valor);
+    setGen(valor);
+    reloadClinics();
+    bump();
+  };
 
   // Si la org activa desaparece (baja) o todavía no había ninguna, se cae a la
   // primera activa. Sin esto, dar de baja la clínica seleccionada dejaría la UI
@@ -60,34 +81,78 @@ export default function App() {
           <h1>PFI — Bus de interoperabilidad</h1>
           <p className="subtitle">Hyperledger Fabric + IPFS · consentimiento y ABAC entre clínicas</p>
         </div>
-        <div className="org-switcher" role="group" aria-label="Actuar como">
-          <span className="org-switcher-label">Actuar como</span>
-          {activas.map((c) => (
-            <button
-              key={c.key}
-              className={`org-btn ${org === c.key ? 'active' : ''}`}
-              style={org === c.key ? { borderColor: c.color, color: c.color } : undefined}
-              onClick={() => setOrg(c.key)}
-            >
-              {c.label}
-            </button>
-          ))}
+        <div className="header-tools">
+          <button
+            className={`chip ${generico ? 'active' : ''}`}
+            onClick={toggleGenerico}
+            aria-pressed={generico}
+            title="Muestra las instituciones como Clínica Genérica N. Solo cambia lo que se ve: las transacciones siguen firmándose con la identidad real."
+          >
+            nombres genéricos
+          </button>
+          <div className="org-switcher" role="group" aria-label="Actuar como">
+            <span className="org-switcher-label">Actuar como</span>
+            {activas.map((c) => (
+              <button
+                key={c.key}
+                className={`org-btn ${org === c.key ? 'active' : ''}`}
+                style={org === c.key ? { borderColor: c.color, color: c.color } : undefined}
+                onClick={() => setOrg(c.key)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      <div className="layout">
-        <div className="main-col">
-          <TopologyPanel org={org} clinics={activas} tick={tick} />
-          <ClinicsPanel clinics={clinics} onChanged={() => { reloadClinics(); bump(); }} />
-          {org && <ActionsPanel org={org} clinics={activas} tick={tick} onDone={bump} />}
-          <AssetsPanel tick={tick} />
-          <ConsentsPanel tick={tick} />
-          <AccessLogPanel tick={tick} />
+      {activoId ? <AssetPage id={activoId} tick={tick} org={org} activas={activas} onDone={bump} /> : (
+      <>
+      {/* Dos vistas de lo mismo: operar el bus, o mirar lo que quedó registrado
+          como grafo. La segunda va a ancho completo y sin el feed, porque el
+          lienzo necesita todo el espacio disponible. */}
+      <nav className="solapas" role="tablist" aria-label="Vistas">
+        {[['operacion', 'Operación'], ['red', 'Red de datos']].map(([id, etiqueta]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={solapa === id}
+            className={`solapa ${solapa === id ? 'active' : ''}`}
+            onClick={() => setSolapa(id)}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </nav>
+
+      {solapa === 'operacion' ? (
+        <div className="layout">
+          <div className="main-col">
+            <TopologyPanel org={org} clinics={activas} tick={tick} />
+            <ClinicsPanel clinics={clinics} onChanged={() => { reloadClinics(); bump(); }} />
+            {org && <ActionsPanel org={org} clinics={activas} tick={tick} onDone={bump} />}
+            <AssetsPanel tick={tick} />
+            <ConsentsPanel tick={tick} />
+            <AccessLogPanel tick={tick} />
+          </div>
+          <aside className="side-col">
+            <EventFeed feed={feed} />
+          </aside>
         </div>
-        <aside className="side-col">
-          <EventFeed feed={feed} />
-        </aside>
-      </div>
+      ) : (
+        <div className="main-col">
+          <GraphPanel clinics={clinics} tick={tick} />
+          <AbmPanel
+            clinics={clinics}
+            activas={activas}
+            org={org}
+            tick={tick}
+            onChanged={() => { reloadClinics(); bump(); }}
+          />
+        </div>
+      )}
+      </>
+      )}
     </div>
   );
 }
