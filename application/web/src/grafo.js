@@ -190,6 +190,11 @@ export function posicionesIniciales(nodos, ancho, alto) {
     const ang = (2 * Math.PI * i) / Math.max(nodos.length, 1);
     n.x = cx + radio * Math.cos(ang);
     n.y = cy + radio * Math.sin(ang);
+    // Margen propio de cada nodo: acotar por el radio dejaba los rótulos
+    // colgando fuera del lienzo, porque el texto es bastante más ancho que el
+    // círculo. ~5.9 px por carácter a 11 px de fuente, la mitad para cada lado.
+    n.margenX = Math.max(TIPOS[n.tipo].radio, (String(n.etiqueta ?? '').length * 5.9) / 2) + 4;
+    n.margenY = TIPOS[n.tipo].radio + (n.subtipo ? 31 : 19);
   });
   return TEMP_INICIAL;
 }
@@ -260,9 +265,12 @@ export function tick(nodos, aristas, temp, ancho, alto) {
     nd.x += mx;
     nd.y += my;
     energia += mx * mx + my * my;
-    const r = TIPOS[nd.tipo].radio + 8;
-    nd.x = Math.max(r, Math.min(ancho - r, nd.x));
-    nd.y = Math.max(r, Math.min(alto - r, nd.y));
+    // Se acota por el margen del nodo —que contempla el ancho del rótulo— y no
+    // por su radio: así el texto entra entero en el lienzo.
+    const margenX = nd.margenX ?? TIPOS[nd.tipo].radio + 8;
+    const margenY = nd.margenY ?? TIPOS[nd.tipo].radio + 8;
+    nd.x = Math.max(margenX, Math.min(ancho - margenX, nd.x));
+    nd.y = Math.max(TIPOS[nd.tipo].radio + 6, Math.min(alto - margenY, nd.y));
   }
 
   // Si el movimiento total ya es despreciable, se corta antes de agotar el

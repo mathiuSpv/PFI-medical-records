@@ -179,6 +179,9 @@ export function useRuta() {
 
 export const irA = (ruta) => { window.location.hash = ruta; };
 export const rutaActivo = (id) => `#/activo/${encodeURIComponent(id)}`;
+// Vista dedicada del mapa: una ruta propia y no un estado interno, así el
+// botón de atrás del navegador vuelve al dashboard y la URL se puede compartir.
+export const RUTA_MAPA = '/mapa';
 
 // idDeRuta devuelve el id del activo si la ruta es la de detalle, o null.
 export function idDeRuta(ruta) {
