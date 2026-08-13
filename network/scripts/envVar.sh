@@ -17,8 +17,8 @@ export ORDERER_ADMIN_TLS_PRIVATE_KEY=${NETWORK_HOME}/organizations/ordererOrgani
 
 # Atajos de las dos fundadoras: el README los usa en las pruebas manuales con
 # el CLI `peer`. Para cualquier otra clínica, usar peerCA <key>.
-export PEER0_SANCRISTOBAL_CA=${NETWORK_HOME}/organizations/peerOrganizations/sancristobal.example.com/tlsca/tlsca.sancristobal.example.com-cert.pem
-export PEER0_MONTENEGRO_CA=${NETWORK_HOME}/organizations/peerOrganizations/montenegro.example.com/tlsca/tlsca.montenegro.example.com-cert.pem
+export PEER0_GENERICA1_CA=${NETWORK_HOME}/organizations/peerOrganizations/generica1.example.com/tlsca/tlsca.generica1.example.com-cert.pem
+export PEER0_GENERICA2_CA=${NETWORK_HOME}/organizations/peerOrganizations/generica2.example.com/tlsca/tlsca.generica2.example.com-cert.pem
 
 # peerCA <key> — certificado de la CA de TLS del peer de esa clínica.
 peerCA() {

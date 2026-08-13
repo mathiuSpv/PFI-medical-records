@@ -29,7 +29,7 @@ module.exports = function buildRoutes(broadcast) {
   const router = express.Router();
 
   // Sin org explícita se usa la primera clínica activa: ya no se puede asumir
-  // que 'sancristobal' existe, porque podría estar dada de baja.
+  // que 'generica1' existe, porque podría estar dada de baja.
   const orgOrDefault = (req) => req.query.org || req.body?.org || defaultOrgKey();
 
   router.get('/status', wrap(() => health.nodesStatus()));

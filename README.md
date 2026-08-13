@@ -8,8 +8,8 @@ de salud sobre **Hyperledger Fabric** (control de acceso, consentimiento, audito
 
 ## Arquitectura (resumen)
 
-Orgs fundadoras (prototipo): **Clínica San Cristóbal** (`ClinicaSanCristobalMSP`) y
-**Clínica Montenegro** (`ClinicaMontenegroMSP`), dos instituciones de salud
+Orgs fundadoras (prototipo): **Clínica Genérica 1** (`ClinicaGenerica1MSP`) y
+**Clínica Genérica 2** (`ClinicaGenerica2MSP`), dos instituciones de salud
 intercambiando recursos entre sí sobre la misma red. No son las únicas posibles: se
 pueden incorporar y sacar instituciones con la red andando — ver
 [Alta y baja de instituciones](#alta-y-baja-de-instituciones).
@@ -17,7 +17,7 @@ pueden incorporar y sacar instituciones con la red andando — ver
 - **Canal público (`canal-universal`)**: todas las orgs. Solo metadatos en claro
   (`fhir_resource_id`, `resource_type`, `ipfs_cid`, `patient_id_hash`, firma, timestamp).
   Nunca contiene payload clínico.
-- **Canal privado por org (`canal-sancristobal`, `canal-montenegro`)**: bitácora interna
+- **Canal privado por org (`canal-generica-1`, `canal-generica-2`)**: bitácora interna
   de cada institución. Único miembro de aplicación: esa org. Orderer compartido.
 - **Ordering service**: Raft (1 nodo en el prototipo), compartido entre los tres canales.
 - **Chaincode (Go, canal público)**: `EmitAsset`, `GrantConsent`, `RevokeConsent`,
@@ -120,7 +120,7 @@ peer chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
 
 ## Paso 2 — Red propia (`network/`)
 
-Dos clínicas de ejemplo (`ClinicaSanCristobalMSP`, `ClinicaMontenegroMSP`) + 1 orderer
+Dos clínicas de ejemplo (`ClinicaGenerica1MSP`, `ClinicaGenerica2MSP`) + 1 orderer
 Raft, sin canal de sistema (channel participation API, igual que la test-network desde
 Fabric 2.3+). El material criptográfico se genera con cryptogen en `network/organizations/`
 (gitignored, se regenera en cada `up`).
@@ -131,8 +131,8 @@ cd network
 # cryptogen (si organizations/ no existe) + docker compose up.
 ./network.sh up
 
-# Genera y une los 3 canales: canal-universal (ambas clínicas), canal-sancristobal
-# y canal-montenegro (bitácora interna de cada una). Fija anchor peers.
+# Genera y une los 3 canales: canal-universal (ambas clínicas), canal-generica-1
+# y canal-generica-2 (bitácora interna de cada una). Fija anchor peers.
 ./network.sh createChannels
 
 # Baja los contenedores y borra organizations/ + channel-artifacts/.
@@ -144,15 +144,15 @@ más solo su propio canal privado):
 
 ```bash
 . scripts/envVar.sh
-setGlobals sancristobal && peer channel list   # canal-universal, canal-sancristobal
-setGlobals montenegro   && peer channel list   # canal-universal, canal-montenegro
+setGlobals generica1 && peer channel list   # canal-universal, canal-generica-1
+setGlobals generica2   && peer channel list   # canal-universal, canal-generica-2
 ```
 
 Estructura:
 
 ```
 network/
-├── crypto-config/    Config de cryptogen: orderer.yaml, sancristobal.yaml, montenegro.yaml
+├── crypto-config/    Config de cryptogen: orderer.yaml, generica1.yaml, generica2.yaml
 ├── configtx/          configtx.yaml — 2 orgs + orderer Raft, 3 perfiles (1 por canal)
 ├── compose/           compose-network.yaml (orderer + peer0 de cada clínica) + peercfg/core.yaml
 ├── scripts/           utils.sh, envVar.sh, configUpdate.sh, createChannel.sh
@@ -234,18 +234,18 @@ CHANNEL=canal-universal; CC=consent
 invokeBoth() {
   peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
     --tls --cafile "$ORDERER_CA" -C $CHANNEL -n $CC \
-    --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_SANCRISTOBAL_CA" \
-    --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_MONTENEGRO_CA" -c "$1"
+    --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_GENERICA1_CA" \
+    --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_GENERICA2_CA" -c "$1"
 }
 
-setGlobals sancristobal
+setGlobals generica1
 invokeBoth '{"function":"EmitAsset","Args":["obs-001","Observation","QmCID...","hashPaciente001"]}'
 sleep 3
 EXPIRY=$(date -u -d "+1 year" +"%Y-%m-%dT%H:%M:%SZ")
-invokeBoth '{"function":"GrantConsent","Args":["hashPaciente001","ClinicaMontenegroMSP","[\"Observation\"]","'"$EXPIRY"'"]}'
+invokeBoth '{"function":"GrantConsent","Args":["hashPaciente001","ClinicaGenerica2MSP","[\"Observation\"]","'"$EXPIRY"'"]}'
 sleep 3
 
-setGlobals montenegro
+setGlobals generica2
 invokeBoth '{"function":"CheckAccess","Args":["obs-001"]}'   # PERMIT
 ```
 
@@ -313,17 +313,17 @@ npm run demo
 
 El flujo de `demo.js` (los nombres de función son literales del chaincode del paso 3):
 
-1. **San Cristóbal** cifra `sample-data/observation-001.json` (AES-256-GCM), lo sube a
+1. **Genérica 1** cifra `sample-data/observation-001.json` (AES-256-GCM), lo sube a
    IPFS y valida que `IPFS.cat` + descifrado reproduzcan el original exacto.
 2. `EmitAsset(fhirResourceID, "Observation", cid, patientIDHash)` — metadatos en claro en
-   `canal-universal`, la clave AES nunca sale del proceso de San Cristóbal.
-3. San Cristóbal empieza a escuchar eventos de chaincode (`getChaincodeEvents`).
+   `canal-universal`, la clave AES nunca sale del proceso de Genérica 1.
+3. Genérica 1 empieza a escuchar eventos de chaincode (`getChaincodeEvents`).
 4. **Solicitud de acceso**: paso fuera del ledger en esta etapa (no hay función de
    chaincode para "pedir" — queda representado como un log). Después, `GrantConsent`
-   desde San Cristóbal.
-5. **Montenegro** somete `CheckAccess(fhirResourceID)` → `PERMIT`.
-6. El evento `AccessPermitted` le llega a San Cristóbal con el certificado X.509 de
-   Montenegro adentro (lo agrega el chaincode, ver más abajo). San Cristóbal envuelve la
+   desde Genérica 1.
+5. **Genérica 2** somete `CheckAccess(fhirResourceID)` → `PERMIT`.
+6. El evento `AccessPermitted` le llega a Genérica 1 con el certificado X.509 de
+   Genérica 2 adentro (lo agrega el chaincode, ver más abajo). Genérica 1 envuelve la
    clave AES para ese certificado y "entrega" la clave — acá el log simulado, según el
    alcance de esta etapa (entrega real por HTTP/mTLS es una etapa futura, ver PLAN.md).
 
@@ -344,8 +344,8 @@ un directorio externo, `CheckAccess` (chaincode, `access.go`) agrega
 ### Listener por org
 
 ```bash
-npm run listen -- sancristobal   # en una terminal
-npm run listen -- montenegro     # en otra
+npm run listen -- generica1   # en una terminal
+npm run listen -- generica2     # en otra
 ```
 
 Se queda escuchando `AccessPermitted` en `canal-universal` hasta Ctrl+C. Comparte la

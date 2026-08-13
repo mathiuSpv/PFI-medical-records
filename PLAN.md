@@ -10,7 +10,7 @@ las decisiones de arquitectura (cerradas) están resumidas en el [README](README
 |------|-------------|--------|
 | 0 | Devcontainer con dependencias Fabric | ✅ Completo |
 | 1 | test-network de referencia funcionando | ✅ Completo |
-| 2 | Red propia 2 orgs (Clínica San Cristóbal + Clínica Montenegro) | ✅ Completo |
+| 2 | Red propia 2 orgs (Clínica Genérica 1 + Clínica Genérica 2) | ✅ Completo |
 | 3 | Chaincode Go (consentimiento + ABAC) | ✅ Completo |
 | 4 | Nodo IPFS local (Kubo) | ✅ Completo |
 | 5 | Cliente de aplicación (Node.js) | ✅ Completo |
@@ -50,20 +50,20 @@ moby-engine=24.0.9-ubuntu22.04u2` + reinicio de `dockerd`.
 
 ## Paso 2 — Red propia (`network/`)
 
-Orgs de ejemplo: **Clínica San Cristóbal** (`ClinicaSanCristobalMSP`) y **Clínica
-Montenegro** (`ClinicaMontenegroMSP`) — dos instituciones de salud intercambiando
+Orgs de ejemplo: **Clínica Genérica 1** (`ClinicaGenerica1MSP`) y **Clínica
+Genérica 2** (`ClinicaGenerica2MSP`) — dos instituciones de salud intercambiando
 recursos entre sí (en vez del par clínica/laboratorio previsto originalmente; el
 diseño de canales es el mismo, generalizado a "canal privado por org").
 
-- [x] Material criptográfico con cryptogen: `network/crypto-config/{orderer,sancristobal,montenegro}.yaml`
+- [x] Material criptográfico con cryptogen: `network/crypto-config/{orderer,generica1,generica2}.yaml`
 - [x] `network/configtx/configtx.yaml`: 2 orgs + orderer Raft compartido (1 nodo), sin
       canal de sistema (channel participation API), 3 perfiles — uno por canal
-- [x] `network/compose/compose-network.yaml`: orderer + peer0.sancristobal + peer0.montenegro
+- [x] `network/compose/compose-network.yaml`: orderer + peer0.generica1 + peer0.generica2
       (Docker-in-Docker montado en los peers para el chaincode builder legacy, mismo
       patrón que test-network)
 - [x] Canal público `canal-universal` (ambas orgs como miembros de aplicación)
-- [x] Canal privado `canal-sancristobal` (solo ClinicaSanCristobalMSP) y
-      `canal-montenegro` (solo ClinicaMontenegroMSP) — bitácora interna por org,
+- [x] Canal privado `canal-generica-1` (solo ClinicaGenerica1MSP) y
+      `canal-generica-2` (solo ClinicaGenerica2MSP) — bitácora interna por org,
       orderer compartido con el resto de los canales
 - [x] `network/network.sh {up|createChannels|down}` — probado punta a punta: los 3
       canales quedan creados y unidos, `peer channel list` confirma que cada peer
@@ -129,7 +129,7 @@ Decisiones no explícitas en el checklist original:
   puede ser RSA-OAEP directo. `src/crypto.js#wrapKeyForRecipient` arma un esquema tipo
   ECIES: ECDH efímero contra la clave pública del certificado del solicitante → HKDF-SHA256
   → AES-256-GCM envuelve la clave real. Probado con `unwrapKey` (round-trip) contra un
-  certificado de prueba, y en la demo con el certificado **real** de `User1@montenegro`
+  certificado de prueba, y en la demo con el certificado **real** de `User1@generica2`
   extraído del evento (ver próximo punto).
 - **`GetChaincodeEvents` de `fabric-gateway` no necesitaba el `sleep` manual del paso 3**:
   `contract.submitTransaction(...)` del SDK Node espera el commit antes de devolver el
