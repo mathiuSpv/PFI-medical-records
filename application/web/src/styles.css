@@ -25,8 +25,8 @@
   --muted: #566f85;     /* 5.2:1 sobre blanco, 4.6:1 sobre --panel-2 */
   --accent: #1668c4;    /* acción primaria, foco, selección */
   --accent-strong: #0f56a8;
-  --sc: #1668c4;        /* institución fundadora 1 */
-  --mn: #0f7551;        /* institución fundadora 2 (5.0:1 también sobre --panel-2) */
+  --org1: #1668c4;        /* institución fundadora 1 (Clínica Genérica 1) */
+  --org2: #0f7551;        /* institución fundadora 2 — Clínica Genérica 2 (5.0:1 también sobre --panel-2) */
   --permit: #0f7551;
   --deny: #c0203c;
   --warn: #8a5a06;
@@ -60,17 +60,6 @@ body {
 .header h1 { margin: 0; font-size: 20px; }
 .subtitle { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .header-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
-.org-switcher { display: flex; align-items: center; gap: 8px; }
-.org-switcher-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-.org-btn {
-  background: var(--panel); color: var(--muted); border: 1.5px solid var(--control);
-  border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600;
-  transition: border-color 160ms ease-out, color 160ms ease-out, box-shadow 160ms ease-out;
-}
-.org-btn:hover { border-color: var(--accent); color: var(--text); }
-/* El color de la org activa lo pone el componente inline (borde y texto); acá
-   solo se agrega la elevación que la despega del resto. */
-.org-btn.active { background: var(--panel); box-shadow: var(--shadow); }
 
 /* ---- layout ---- */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
@@ -84,58 +73,7 @@ body {
 .panel h2 { margin: 0; font-size: 15px; }
 .hint { color: var(--muted); font-size: 12px; }
 
-/* ---- topología ---- */
-/* El diagrama va sobre un lienzo celeste dentro de la tarjeta blanca: así las
-   cajas de nodo pueden ser blancas y destacarse (en el tema oscuro el contraste
-   lo daba la superficie más clara; acá lo da la inversión). */
-.topology-scroll { overflow-x: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
-.topology { width: 100%; height: auto; }
-.node-box { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
-.node-title { fill: var(--text); font-size: 13px; font-weight: 600; }
-.node-sub { fill: var(--muted); font-size: 11px; }
-.dot-ok { fill: var(--permit); }
-.dot-down { fill: var(--deny); }
-.link { stroke: var(--line); stroke-width: 1.5; }
-.link.dashed { stroke-dasharray: 5 5; }
-.channel rect { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.5; }
-.channel.locked rect { stroke-dasharray: 4 4; fill: var(--bg); }
-.channel-name { fill: var(--text); font-size: 12px; font-weight: 600; }
-.channel-info { fill: var(--muted); font-size: 11px; }
-.channel.locked .channel-name, .channel.locked .channel-info { fill: var(--muted); }
-.topology-note { fill: var(--muted); font-size: 11px; font-style: italic; }
-
-/* El canal-universal se dibuja como una barra que cruza el ancho y de la que
-   cada institución toma una derivación: es un bus, y como badge suelto no se
-   leía así. El trazo es más grueso que el de los conectores comunes para que la
-   jerarquía se vea sin depender del color. */
-.bus-rail { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
-.bus-stem { stroke: var(--accent); stroke-width: 1.5; }
-.bus-tap { stroke: var(--panel); stroke-width: 2; }
-.bus-pill rect { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; }
-.punta-offchain { fill: var(--line); }
-
-/* Columna de la institución con cuya identidad se mira la red. El relleno solo
-   no alcanzaba: con los colores cálidos de la paleta, un 7 % sobre blanco daba
-   un gris sucio que no se leía como selección. El borde del color de la
-   institución es lo que hace el trabajo; el relleno acompaña. */
-.col-activa { fill-opacity: 0.09; stroke-opacity: 0.5; stroke-width: 1.5; }
-
-/* IPFS va en una banda de borde punteado, separada de las cajas del ledger: el
-   punteado es lo que marca que está fuera de la cadena. */
-.offchain rect { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 6 4; }
-
-.leyenda text { fill: var(--muted); font-size: 11px; }
-.muestra-locked { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 3; }
-
-/* Nodo simulado: ni verde ni rojo. En vista previa no hay sonda de salud que
-   reportar y pintar el punto de verde sería inventar un estado. */
-.dot-sim { fill: var(--muted); }
-.topology.is-preview .node-box, .topology.is-preview .channel rect { stroke-dasharray: 5 3; }
-
-/* ---- control de vista previa ---- */
-.topology-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.preview-switch { display: flex; align-items: center; gap: 5px; }
-.preview-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+/* ---- chips ---- */
 .chip {
   background: var(--panel); color: var(--muted); border: 1px solid var(--control);
   border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; line-height: 1.4;
@@ -236,10 +174,6 @@ code { font-family: var(--mono); font-size: 12px; }
 @media (max-width: 700px) { .clinic-form { grid-template-columns: 1fr; } }
 
 .cell-actions { width: 1%; white-space: nowrap; }
-.inline-input {
-  background: var(--bg); color: var(--text); border: 1px solid var(--control);
-  border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12px; width: 150px;
-}
 /* Una clínica dada de baja se marca con un fondo tenue y su badge, no bajándole
    la opacidad al texto: eso rompería el contraste justo en la fila que hay que
    poder leer. */
@@ -255,8 +189,6 @@ code { font-family: var(--mono); font-size: 12px; }
 }
 .op-log li.ok { color: var(--permit); font-weight: 600; }
 .op-log li.error { color: var(--deny); font-weight: 600; }
-/* La columna de acciones es angosta: el motivo y el botón van en una línea. */
-.cell-actions .btn-row { flex-wrap: nowrap; align-items: center; }
 
 /* ---- solapas de nivel superior ---- */
 .solapas { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
@@ -360,15 +292,6 @@ code { font-family: var(--mono); font-size: 12px; }
 .bloque .props { margin: 0; }
 .bloque-pendiente { color: var(--muted); font-style: italic; }
 .bloque-error { color: var(--deny); background: #fbe6ea; border-color: var(--deny); }
-
-/* ---- ABM de la solapa de red ---- */
-/* ClinicsPanel y AssetsPanel se reutilizan tal cual, y traen su propia caja de
-   panel. Adentro del ABM esa caja sobra: quedaría un panel dentro de otro con
-   doble borde y doble sombra. */
-.abm-panel > .panel { border: none; box-shadow: none; padding: 0; background: none; }
-.abm-panel > .panel + .form,
-.abm-panel .form + .panel { margin-top: 14px; }
-.abm-panel .panel-head + .hint { display: block; margin-bottom: 12px; }
 
 /* Ampliado: el cuadro ocupa toda la ventana del navegador —sin salir de la
    pagina— y el panel de detalle baja al pie, en ancho completo. Se vuelve al

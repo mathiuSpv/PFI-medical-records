@@ -10,8 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // Las dos fundadoras conservan sus colores; a las demás se les asigna uno
 // estable derivado del key, para que la misma clínica se vea siempre igual.
 const COLOR_FUNDADORAS = {
-  sancristobal: 'var(--sc)',
-  montenegro: 'var(--mn)',
+  generica1: 'var(--org1)',
+  generica2: 'var(--org2)',
 };
 // Tonos medios, no pasteles: estos colores se usan como texto (el nombre de la
 // institución en tablas y feed) sobre fondo blanco, así que todos tienen que
@@ -26,58 +26,15 @@ export function colorFor(key) {
 }
 
 let clinicsCache = [];
-let clinicsCrudas = [];
-
-// ---- Modo genérico ----
-//
-// Las instituciones de prueba tienen nombres propios, y esos nombres aparecen
-// en toda la UI: tablas, feed, topología. Para mostrar el prototipo fuera del
-// equipo —capturas, documentación, una demostración— hace falta poder verlo con
-// instituciones genéricas sin tocar la red: el material criptográfico, los MSP
-// ID y los nombres de canal ya están emitidos, y renombrarlos de verdad obliga
-// a regenerar todo y a volver a crear los canales.
-//
-// Por eso el enmascarado es SOLO de presentación. Los campos reales (key,
-// mspId, privateChannel) quedan intactos y son los que viajan en las llamadas
-// al BFF; los campos *Label son los que se dibujan. Mezclarlos rompería las
-// transacciones, así que la regla es: para pedir, el campo real; para mostrar,
-// el Label.
-//
-// La numeración sale del orden del registro, que es el orden de alta y no
-// cambia: la misma institución es siempre la misma Genérica N.
-const GENERICO_STORAGE = 'pfi.modoGenerico';
-let generico = true;
-try {
-  generico = localStorage.getItem(GENERICO_STORAGE) !== 'off';
-} catch {
-  // Sin localStorage (modo privado estricto) el default vale igual.
-}
-
-export const esGenerico = () => generico;
-
-export function setGenerico(valor) {
-  generico = valor;
-  try {
-    localStorage.setItem(GENERICO_STORAGE, valor ? 'on' : 'off');
-  } catch { /* el modo sigue valiendo en memoria */ }
-  return setClinics(clinicsCrudas);
-}
 
 // setClinics normaliza lo que devuelve /api/clinics al shape que usa la UI.
 export function setClinics(lista) {
-  clinicsCrudas = lista ?? [];
-  clinicsCache = clinicsCrudas.map((c, i) => {
-    const nro = i + 1;
-    return {
-      ...c,
-      color: colorFor(c.key),
-      activa: c.estado === 'activa',
-      label: generico ? `Clínica Genérica ${nro}` : c.nombre,
-      keyLabel: generico ? `generica${nro}` : c.key,
-      mspLabel: generico ? `ClinicaGenerica${nro}MSP` : c.mspId,
-      channelLabel: generico ? `canal-generica-${nro}` : c.privateChannel,
-    };
-  });
+  clinicsCache = (lista ?? []).map((c) => ({
+    ...c,
+    color: colorFor(c.key),
+    activa: c.estado === 'activa',
+    label: c.nombre,
+  }));
   return clinicsCache;
 }
 
@@ -87,11 +44,6 @@ export const clinicByKey = (key) => clinicsCache.find((c) => c.key === key);
 
 export const orgByMsp = (mspId) =>
   clinicsCache.find((c) => c.mspId === mspId) ?? { label: mspId, color: 'var(--muted)' };
-
-// Para los eventos del chaincode, que traen el MSP ID crudo y pueden referirse
-// a una institución que ya no está en el registro (una baja). En ese caso no
-// hay nada que enmascarar y se devuelve el valor tal cual.
-export const mspLabelFor = (mspId) => orgByMsp(mspId).mspLabel ?? mspId;
 
 export async function api(path, body) {
   const res = await fetch(`/api${path}`, body === undefined ? undefined : {

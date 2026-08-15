@@ -58,8 +58,8 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
       color: c.color,
       baja: c.estado !== 'activa',
       props: {
-        'MSP ID': c.mspLabel ?? c.mspId,
-        'Canal privado': c.channelLabel ?? c.privateChannel,
+        'MSP ID': c.mspId,
+        'Canal privado': c.privateChannel,
         Estado: c.estado,
         Fundadora: c.fundadora ? 'sí' : 'no',
       },
