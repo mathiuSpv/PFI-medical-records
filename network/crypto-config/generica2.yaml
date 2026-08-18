@@ -1,7 +1,7 @@
-# Material criptográfico de la Clínica Montenegro (cryptogen).
+# Material criptográfico de la Clínica Genérica 2 (cryptogen).
 PeerOrgs:
-  - Name: Montenegro
-    Domain: montenegro.example.com
+  - Name: Generica2
+    Domain: generica2.example.com
     EnableNodeOUs: true
     Template:
       Count: 1

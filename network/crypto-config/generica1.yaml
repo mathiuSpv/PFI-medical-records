@@ -1,0 +1,11 @@
+# Material criptográfico de la Clínica Genérica 1 (cryptogen).
+PeerOrgs:
+  - Name: Generica1
+    Domain: generica1.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - localhost
+    Users:
+      Count: 1

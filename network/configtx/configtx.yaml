@@ -24,41 +24,41 @@ Organizations:
     OrdererEndpoints:
       - orderer.example.com:7050
 
-  - &ClinicaSanCristobal
-    Name: ClinicaSanCristobalMSP
-    ID: ClinicaSanCristobalMSP
-    MSPDir: ../organizations/peerOrganizations/sancristobal.example.com/msp
+  - &ClinicaGenerica1
+    Name: ClinicaGenerica1MSP
+    ID: ClinicaGenerica1MSP
+    MSPDir: ../organizations/peerOrganizations/generica1.example.com/msp
     Policies:
       Readers:
         Type: Signature
-        Rule: "OR('ClinicaSanCristobalMSP.admin', 'ClinicaSanCristobalMSP.peer', 'ClinicaSanCristobalMSP.client')"
+        Rule: "OR('ClinicaGenerica1MSP.admin', 'ClinicaGenerica1MSP.peer', 'ClinicaGenerica1MSP.client')"
       Writers:
         Type: Signature
-        Rule: "OR('ClinicaSanCristobalMSP.admin', 'ClinicaSanCristobalMSP.client')"
+        Rule: "OR('ClinicaGenerica1MSP.admin', 'ClinicaGenerica1MSP.client')"
       Admins:
         Type: Signature
-        Rule: "OR('ClinicaSanCristobalMSP.admin')"
+        Rule: "OR('ClinicaGenerica1MSP.admin')"
       Endorsement:
         Type: Signature
-        Rule: "OR('ClinicaSanCristobalMSP.peer')"
+        Rule: "OR('ClinicaGenerica1MSP.peer')"
 
-  - &ClinicaMontenegro
-    Name: ClinicaMontenegroMSP
-    ID: ClinicaMontenegroMSP
-    MSPDir: ../organizations/peerOrganizations/montenegro.example.com/msp
+  - &ClinicaGenerica2
+    Name: ClinicaGenerica2MSP
+    ID: ClinicaGenerica2MSP
+    MSPDir: ../organizations/peerOrganizations/generica2.example.com/msp
     Policies:
       Readers:
         Type: Signature
-        Rule: "OR('ClinicaMontenegroMSP.admin', 'ClinicaMontenegroMSP.peer', 'ClinicaMontenegroMSP.client')"
+        Rule: "OR('ClinicaGenerica2MSP.admin', 'ClinicaGenerica2MSP.peer', 'ClinicaGenerica2MSP.client')"
       Writers:
         Type: Signature
-        Rule: "OR('ClinicaMontenegroMSP.admin', 'ClinicaMontenegroMSP.client')"
+        Rule: "OR('ClinicaGenerica2MSP.admin', 'ClinicaGenerica2MSP.client')"
       Admins:
         Type: Signature
-        Rule: "OR('ClinicaMontenegroMSP.admin')"
+        Rule: "OR('ClinicaGenerica2MSP.admin')"
       Endorsement:
         Type: Signature
-        Rule: "OR('ClinicaMontenegroMSP.peer')"
+        Rule: "OR('ClinicaGenerica2MSP.peer')"
 
 ################################################################################
 #   Capabilities
@@ -166,27 +166,27 @@ Profiles:
     Application:
       <<: *ApplicationDefaults
       Organizations:
-        - *ClinicaSanCristobal
-        - *ClinicaMontenegro
+        - *ClinicaGenerica1
+        - *ClinicaGenerica2
 
-  # Canal privado de la Clínica San Cristóbal: único miembro de aplicación es
+  # Canal privado de la Clínica Genérica 1: único miembro de aplicación es
   # ella misma. Sirve como bitácora interna; el orderer se comparte con el
-  # resto de los canales pero Montenegro no es miembro de este.
-  CanalSanCristobal:
+  # resto de los canales pero Genérica 2 no es miembro de este.
+  CanalGenerica1:
     <<: *ChannelDefaults
     Orderer:
       <<: *OrdererDefaults
     Application:
       <<: *ApplicationDefaults
       Organizations:
-        - *ClinicaSanCristobal
+        - *ClinicaGenerica1
 
-  # Canal privado de la Clínica Montenegro: análogo al anterior.
-  CanalMontenegro:
+  # Canal privado de la Clínica Genérica 2: análogo al anterior.
+  CanalGenerica2:
     <<: *ChannelDefaults
     Orderer:
       <<: *OrdererDefaults
     Application:
       <<: *ApplicationDefaults
       Organizations:
-        - *ClinicaMontenegro
+        - *ClinicaGenerica2

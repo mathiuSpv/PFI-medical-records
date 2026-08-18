@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Red Fabric propia del proyecto: 1 orderer Raft + Clínica San Cristóbal +
-# Clínica Montenegro. Uso:
+# Red Fabric propia del proyecto: 1 orderer Raft + Clínica Genérica 1 +
+# Clínica Genérica 2. Uso:
 #
 #   ./network.sh up              levanta cryptogen + contenedores
-#   ./network.sh createChannels  crea canal-universal, canal-sancristobal y
-#                                 canal-montenegro (requiere 'up' previo)
+#   ./network.sh createChannels  crea canal-universal, canal-generica-1 y
+#                                 canal-generica-2 (requiere 'up' previo)
 #   ./network.sh deployCC        despliega el chaincode de consentimiento
 #   ./network.sh down            baja todo y borra material generado
 #   ./network.sh ipfsUp          levanta el nodo IPFS local (Kubo), API en :5001
@@ -46,13 +46,13 @@ generateCrypto() {
   fi
   which cryptogen > /dev/null || fatalln "cryptogen no está en el PATH"
 
-  infoln "Generando material criptográfico (orderer, ClinicaSanCristobalMSP, ClinicaMontenegroMSP)"
+  infoln "Generando material criptográfico (orderer, ClinicaGenerica1MSP, ClinicaGenerica2MSP)"
   cryptogen generate --config=crypto-config/orderer.yaml --output="organizations"
   verifyResult $? "Fallo generando el material del orderer"
-  cryptogen generate --config=crypto-config/sancristobal.yaml --output="organizations"
-  verifyResult $? "Fallo generando el material de la Clínica San Cristóbal"
-  cryptogen generate --config=crypto-config/montenegro.yaml --output="organizations"
-  verifyResult $? "Fallo generando el material de la Clínica Montenegro"
+  cryptogen generate --config=crypto-config/generica1.yaml --output="organizations"
+  verifyResult $? "Fallo generando el material de la Clínica Genérica 1"
+  cryptogen generate --config=crypto-config/generica2.yaml --output="organizations"
+  verifyResult $? "Fallo generando el material de la Clínica Genérica 2"
   successln "Material criptográfico generado en network/organizations/"
 }
 
@@ -119,14 +119,14 @@ listClinics() {
 createChannels() {
   [ -d "organizations/peerOrganizations" ] || fatalln "Correr './network.sh up' primero"
 
-  infoln "== canal-universal (ClinicaSanCristobalMSP + ClinicaMontenegroMSP) =="
-  scripts/createChannel.sh canal-universal CanalUniversal sancristobal montenegro
+  infoln "== canal-universal (ClinicaGenerica1MSP + ClinicaGenerica2MSP) =="
+  scripts/createChannel.sh canal-universal CanalUniversal generica1 generica2
 
-  infoln "== canal-sancristobal (bitácora interna, solo ClinicaSanCristobalMSP) =="
-  scripts/createChannel.sh canal-sancristobal CanalSanCristobal sancristobal
+  infoln "== canal-generica-1 (bitácora interna, solo ClinicaGenerica1MSP) =="
+  scripts/createChannel.sh canal-generica-1 CanalGenerica1 generica1
 
-  infoln "== canal-montenegro (bitácora interna, solo ClinicaMontenegroMSP) =="
-  scripts/createChannel.sh canal-montenegro CanalMontenegro montenegro
+  infoln "== canal-generica-2 (bitácora interna, solo ClinicaGenerica2MSP) =="
+  scripts/createChannel.sh canal-generica-2 CanalGenerica2 generica2
 
   successln "Los tres canales quedaron creados y unidos"
 }

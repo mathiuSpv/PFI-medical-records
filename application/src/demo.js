@@ -4,21 +4,21 @@
 // criptográfico de la otra. Acá simulamos ambos lados a la vez porque, en
 // este entorno de desarrollo local, tenemos acceso de archivo a las dos.
 //
-//   1. San Cristóbal cifra un recurso FHIR de ejemplo (AES-256-GCM) y lo
+//   1. Genérica 1 cifra un recurso FHIR de ejemplo (AES-256-GCM) y lo
 //      sube a IPFS.
-//   2. San Cristóbal invoca EmitAsset con el CID (el chaincode nunca ve el
+//   2. Genérica 1 invoca EmitAsset con el CID (el chaincode nunca ve el
 //      payload ni la clave).
-//   3. San Cristóbal empieza a escuchar eventos de chaincode (así reacciona
+//   3. Genérica 1 empieza a escuchar eventos de chaincode (así reacciona
 //      a un PERMIT sobre sus propios recursos).
-//   4. "Solicitud de acceso": Montenegro le pide a San Cristóbal acceso al
+//   4. "Solicitud de acceso": Genérica 2 le pide a Genérica 1 acceso al
 //      tipo de recurso del paciente — en esta etapa es un paso fuera del
 //      ledger (una llamada, un mail), no hay función de chaincode para
 //      "pedir"; queda representado como un log.
-//   5. San Cristóbal otorga el consentimiento (GrantConsent).
-//   6. Montenegro pide acceso on-chain (CheckAccess) -> PERMIT.
-//   7. El evento AccessPermitted le llega a San Cristóbal con el
-//      certificado X.509 de Montenegro adentro.
-//   8. San Cristóbal envuelve la clave AES del recurso para ese
+//   5. Genérica 1 otorga el consentimiento (GrantConsent).
+//   6. Genérica 2 pide acceso on-chain (CheckAccess) -> PERMIT.
+//   7. El evento AccessPermitted le llega a Genérica 1 con el
+//      certificado X.509 de Genérica 2 adentro.
+//   8. Genérica 1 envuelve la clave AES del recurso para ese
 //      certificado y "entrega" la clave — acá el log simulado, en vez de
 //      un envío real por HTTP/mTLS entre orgs (eso queda para una etapa
 //      futura, ver PLAN.md).
@@ -50,30 +50,30 @@ function oneYearFromNow() {
 async function main() {
   console.log('=== PFI — demo de punta a punta: emisión, consentimiento, ABAC y entrega de clave ===\n');
 
-  const sancristobal = await newGatewayForOrg('sancristobal');
-  const montenegro = await newGatewayForOrg('montenegro');
+  const generica1 = await newGatewayForOrg('generica1');
+  const generica2 = await newGatewayForOrg('generica2');
 
   // "keystore" del prototipo: mapa en memoria de claves AES por recurso.
   // Fuera de alcance en esta etapa: HSM / gestión de claves persistente.
   const keyStore = new Map();
 
   try {
-    const scNetwork = sancristobal.gateway.getNetwork(CHANNEL_NAME);
+    const scNetwork = generica1.gateway.getNetwork(CHANNEL_NAME);
     const scContract = scNetwork.getContract(CHAINCODE_NAME);
-    const mtNetwork = montenegro.gateway.getNetwork(CHANNEL_NAME);
+    const mtNetwork = generica2.gateway.getNetwork(CHANNEL_NAME);
     const mtContract = mtNetwork.getContract(CHAINCODE_NAME);
 
     // --- 1) Cifrar el recurso de ejemplo y subirlo a IPFS -----------------
     const resource = JSON.parse(await fs.readFile(SAMPLE_PATH, 'utf8'));
     const { blob, aesKey } = encryptResource(resource);
     const cid = await uploadToIPFS(blob, 'observation-001.enc');
-    console.log(`[${sancristobal.mspId}] Recurso cifrado subido a IPFS. CID=${cid}`);
+    console.log(`[${generica1.mspId}] Recurso cifrado subido a IPFS. CID=${cid}`);
 
     // Verificación de punta a punta del pipeline cifrar->IPFS->descifrar.
     const downloaded = await downloadFromIPFS(cid);
     const roundtrip = decryptResource(downloaded, aesKey);
     assert.deepEqual(roundtrip, resource);
-    console.log(`[${sancristobal.mspId}] Verificado: IPFS.cat(${cid}) descifra igual al original`);
+    console.log(`[${generica1.mspId}] Verificado: IPFS.cat(${cid}) descifra igual al original`);
 
     const fhirResourceID = `obs-${Date.now()}`;
     const resourceType = 'Observation';
@@ -85,14 +85,14 @@ async function main() {
 
     // --- 2) EmitAsset: metadatos públicos en canal-universal ---------------
     await scContract.submitTransaction('EmitAsset', fhirResourceID, resourceType, cid, patientIDHash);
-    console.log(`[${sancristobal.mspId}] EmitAsset OK (fhirResourceID=${fhirResourceID})`);
+    console.log(`[${generica1.mspId}] EmitAsset OK (fhirResourceID=${fhirResourceID})`);
 
-    // --- 3) San Cristóbal escucha eventos sobre sus propios recursos -------
+    // --- 3) Genérica 1 escucha eventos sobre sus propios recursos -------
     const { events, done: listenerDone } = await listenForEvents(scNetwork, (event, payload) => {
       if (event.eventName !== 'AccessPermitted') return;
       if (payload.FhirResourceID !== fhirResourceID) return;
 
-      console.log(`\n<-- [${sancristobal.mspId}] Evento AccessPermitted recibido (tx ${event.transactionId})`);
+      console.log(`\n<-- [${generica1.mspId}] Evento AccessPermitted recibido (tx ${event.transactionId})`);
       console.log(`    Solicitante: ${payload.RequesterOrg}`);
 
       const key = keyStore.get(payload.FhirResourceID);
@@ -108,24 +108,24 @@ async function main() {
     });
 
     // --- 4) Solicitud de acceso (fuera del ledger en esta etapa) -----------
-    console.log(`\n[${montenegro.mspId}] Solicitud de acceso al recurso ${fhirResourceID} (${resourceType}) del paciente ${patientIDHash.slice(0, 12)}… (fuera del ledger: mail/llamada a San Cristóbal)`);
+    console.log(`\n[${generica2.mspId}] Solicitud de acceso al recurso ${fhirResourceID} (${resourceType}) del paciente ${patientIDHash.slice(0, 12)}… (fuera del ledger: mail/llamada a Genérica 1)`);
 
     // --- 5) GrantConsent -----------------------------------------------------
     await scContract.submitTransaction(
       'GrantConsent',
       patientIDHash,
-      montenegro.mspId,
+      generica2.mspId,
       JSON.stringify([resourceType]),
       oneYearFromNow(),
     );
-    console.log(`[${sancristobal.mspId}] GrantConsent OK (${montenegro.mspId}, ${resourceType}, 1 año)`);
+    console.log(`[${generica1.mspId}] GrantConsent OK (${generica2.mspId}, ${resourceType}, 1 año)`);
 
     // --- 6) CheckAccess (on-chain, ABAC) -------------------------------------
     // Va por recurso puntual: el tipo y el paciente los deriva el chaincode del
     // activo, así que el solicitante no puede declararlos a conveniencia.
     const decisionBytes = await mtContract.submitTransaction('CheckAccess', fhirResourceID);
     const decision = Buffer.from(decisionBytes).toString('utf8');
-    console.log(`[${montenegro.mspId}] CheckAccess -> ${decision}`);
+    console.log(`[${generica2.mspId}] CheckAccess -> ${decision}`);
     assert.equal(decision, 'PERMIT');
 
     // Darle un respiro al listener asincrónico para procesar el evento.
@@ -136,10 +136,10 @@ async function main() {
 
     console.log('\n=== Demo completa ===');
   } finally {
-    sancristobal.gateway.close();
-    sancristobal.client.close();
-    montenegro.gateway.close();
-    montenegro.client.close();
+    generica1.gateway.close();
+    generica1.client.close();
+    generica2.gateway.close();
+    generica2.client.close();
   }
 }
 
