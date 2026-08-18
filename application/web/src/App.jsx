@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RUTA_MAPA, api, esGenerico, idDeRuta, setGenerico, useClinics, useRuta, useSSE } from './api.js';
-import TopologyPanel from './components/TopologyPanel.jsx';
+import { RUTA_MAPA, api, idDeRuta, useClinics, useRuta, useSSE } from './api.js';
 import ActionsPanel from './components/ActionsPanel.jsx';
 import ClinicsPanel from './components/ClinicsPanel.jsx';
 import AssetsPanel from './components/AssetsPanel.jsx';
@@ -8,17 +7,16 @@ import ConsentsPanel from './components/ConsentsPanel.jsx';
 import AccessLogPanel from './components/AccessLogPanel.jsx';
 import EventFeed from './components/EventFeed.jsx';
 import GraphPanel from './components/GraphPanel.jsx';
-import AbmPanel from './components/AbmPanel.jsx';
 import AssetPage from './components/AssetPage.jsx';
 
 export default function App() {
   const { clinics, reload: reloadClinics } = useClinics();
   const activas = clinics.filter((c) => c.activa);
 
-  // Org activa: con qué identidad se ejecutan las acciones ("actuar como").
-  // Arranca vacía y la fija la primera clínica que llega: cuáles existen se
-  // sabe recién cuando responde /api/clinics.
-  const [org, setOrg] = useState(null);
+  // No hay identidad global: la consola administra la red entera y no actúa como
+  // ninguna institución. La org que firma se elige dentro de cada acción que
+  // genera una transacción (ver ActionsPanel y AssetPage).
+  //
   // tick: contador de refresco — las tablas refetchean cuando cambia
   // (tras cada acción propia y ante cada evento SSE).
   const [tick, setTick] = useState(0);
@@ -31,29 +29,6 @@ export default function App() {
   const ruta = useRuta();
   const activoId = idDeRuta(ruta);
   const soloMapa = ruta === RUTA_MAPA;
-
-  // Modo genérico: enmascara los nombres de las instituciones en toda la UI.
-  // El estado real vive en api.js (y en localStorage); acá se replica solo para
-  // que React redibuje, y se recarga el listado para que las etiquetas nuevas
-  // lleguen a los paneles.
-  const [generico, setGen] = useState(esGenerico());
-  const toggleGenerico = () => {
-    const valor = !generico;
-    setGenerico(valor);
-    setGen(valor);
-    reloadClinics();
-    bump();
-  };
-
-  // Si la org activa desaparece (baja) o todavía no había ninguna, se cae a la
-  // primera activa. Sin esto, dar de baja la clínica seleccionada dejaría la UI
-  // firmando como una org que ya no existe.
-  useEffect(() => {
-    if (activas.length === 0) return;
-    if (!org || !activas.some((c) => c.key === org)) {
-      setOrg(activas[0].key);
-    }
-  }, [activas, org]);
 
   // Entregas previas al load (el feed SSE solo trae lo nuevo).
   useEffect(() => {
@@ -84,35 +59,19 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div>
-          <h1>PFI — Bus de interoperabilidad</h1>
-          <p className="subtitle">Hyperledger Fabric + IPFS · consentimiento y ABAC entre clínicas</p>
+          <h1>PFI — Consola de red</h1>
+          <p className="subtitle">
+            Hyperledger Fabric + IPFS · administración del bus: todas las instituciones, activos y consentimientos
+          </p>
         </div>
         <div className="header-tools">
-          <button
-            className={`chip ${generico ? 'active' : ''}`}
-            onClick={toggleGenerico}
-            aria-pressed={generico}
-            title="Muestra las instituciones como Clínica Genérica N. Solo cambia lo que se ve: las transacciones siguen firmándose con la identidad real."
-          >
-            nombres genéricos
-          </button>
-          <div className="org-switcher" role="group" aria-label="Actuar como">
-            <span className="org-switcher-label">Actuar como</span>
-            {activas.map((c) => (
-              <button
-                key={c.key}
-                className={`org-btn ${org === c.key ? 'active' : ''}`}
-                style={org === c.key ? { borderColor: c.color, color: c.color } : undefined}
-                onClick={() => setOrg(c.key)}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
+          <span className="hint">
+            {activas.length} institución{activas.length === 1 ? '' : 'es'} activa{activas.length === 1 ? '' : 's'} en el bus
+          </span>
         </div>
       </header>
 
-      {activoId ? <AssetPage id={activoId} tick={tick} org={org} activas={activas} onDone={bump} /> : (
+      {activoId ? <AssetPage id={activoId} tick={tick} activas={activas} onDone={bump} /> : (
       <>
       {/* Dos vistas de lo mismo: operar el bus, o mirar lo que quedó registrado
           como grafo. La segunda va a ancho completo y sin el feed, porque el
@@ -134,9 +93,8 @@ export default function App() {
       {solapa === 'operacion' ? (
         <div className="layout">
           <div className="main-col">
-            <TopologyPanel org={org} clinics={activas} tick={tick} />
             <ClinicsPanel clinics={clinics} onChanged={() => { reloadClinics(); bump(); }} />
-            {org && <ActionsPanel org={org} clinics={activas} tick={tick} onDone={bump} />}
+            {activas.length > 0 && <ActionsPanel clinics={activas} onDone={bump} />}
             <AssetsPanel tick={tick} />
             <ConsentsPanel tick={tick} />
             <AccessLogPanel tick={tick} />
@@ -148,13 +106,6 @@ export default function App() {
       ) : (
         <div className="main-col">
           <GraphPanel clinics={clinics} tick={tick} />
-          <AbmPanel
-            clinics={clinics}
-            activas={activas}
-            org={org}
-            tick={tick}
-            onChanged={() => { reloadClinics(); bump(); }}
-          />
         </div>
       )}
       </>

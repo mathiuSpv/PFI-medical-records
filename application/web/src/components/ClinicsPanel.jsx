@@ -21,7 +21,6 @@ function EstadoBadge({ estado }) {
 export default function ClinicsPanel({ clinics, onChanged }) {
   const [key, setKey] = useState('');
   const [nombre, setNombre] = useState('');
-  const [motivos, setMotivos] = useState({});
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [progreso, setProgreso] = useState([]);
@@ -52,8 +51,9 @@ export default function ClinicsPanel({ clinics, onChanged }) {
     setNombre('');
   });
 
-  const baja = (c) => correr(`baja:${c.key}`, () =>
-    api(`/clinics/${c.key}/baja`, { motivo: motivos[c.key] || 'baja solicitada' }));
+  // El motivo lo pone el backend por default: la baja se decide con el botón y
+  // el porqué no se pedía en ningún flujo real, era un campo libre de más.
+  const baja = (c) => correr(`baja:${c.key}`, () => api(`/clinics/${c.key}/baja`, {}));
 
   const activas = clinics.filter((c) => c.activa).length;
 
@@ -85,7 +85,7 @@ export default function ClinicsPanel({ clinics, onChanged }) {
                 <span className="org-badge" style={{ color: c.color }}>{c.label}</span>
                 {c.fundadora && <span className="hint"> · fundadora</span>}
               </td>
-              <td><code>{c.mspLabel ?? c.mspId}</code></td>
+              <td><code>{c.mspId}</code></td>
               <td><code>{c.peerEndpoint?.split(':')[1]}</code></td>
               <td><EstadoBadge estado={c.estado} /></td>
               <td>
@@ -95,22 +95,14 @@ export default function ClinicsPanel({ clinics, onChanged }) {
               <td>{c.peerOk ? <span className="badge permit">up</span> : <span className="badge deny">down</span>}</td>
               <td className="cell-actions">
                 {c.activa && (
-                  <div className="btn-row">
-                    <input
-                      className="inline-input"
-                      placeholder="motivo de la baja"
-                      value={motivos[c.key] ?? ''}
-                      onChange={(e) => setMotivos((m) => ({ ...m, [c.key]: e.target.value }))}
-                    />
-                    <button
-                      className="danger"
-                      disabled={!!busy || activas < 2}
-                      title={activas < 2 ? 'No se puede dar de baja la última clínica activa' : undefined}
-                      onClick={() => baja(c)}
-                    >
-                      Dar de baja
-                    </button>
-                  </div>
+                  <button
+                    className="danger"
+                    disabled={!!busy || activas < 2}
+                    title={activas < 2 ? 'No se puede dar de baja la última clínica activa' : undefined}
+                    onClick={() => baja(c)}
+                  >
+                    Dar de baja
+                  </button>
                 )}
               </td>
             </tr>

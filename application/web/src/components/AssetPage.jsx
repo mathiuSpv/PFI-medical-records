@@ -10,7 +10,7 @@
 // chaincode no guarda el TxID de la emisión ni expone el historial del activo,
 // así que no hay por dónde buscarlo.
 import { useEffect, useState } from 'react';
-import { api, clinicByKey, irA, orgByMsp, useFetch } from '../api.js';
+import { api, irA, orgByMsp, useFetch } from '../api.js';
 
 function Bloque({ txId }) {
   const [estado, setEstado] = useState({ cargando: true });
@@ -56,14 +56,18 @@ function vencimientoPorDefecto() {
   return `${d.toISOString().slice(0, 10)}T23:59:59Z`;
 }
 
-export default function AssetPage({ id, tick, org, activas = [], onDone }) {
+export default function AssetPage({ id, tick, activas = [], onDone }) {
   const [ocupado, setOcupado] = useState(null);
   const [resultado, setResultado] = useState(null);
   const [destino, setDestino] = useState('');
+  // Quién pide el acceso. Es lo único que hay que elegir en esta página: ceder y
+  // revocar los firma la institución emisora, porque el chaincode no acepta un
+  // GrantConsent que venga de otra — no hay decisión que tomar ahí.
+  const [solicitante, setSolicitante] = useState('');
 
   // Las tres acciones comparten forma: bloquean, ejecutan, refrescan y dejan el
-  // resultado a la vista. Sin formularios: el recurso ya es este, la identidad
-  // sale del selector del header y el resto se deriva del activo.
+  // resultado a la vista. Sin formularios: el recurso ya es este y el resto se
+  // deriva del activo.
   const correr = async (accion, etiqueta, fn) => {
     setOcupado(accion);
     setResultado(null);
@@ -116,11 +120,21 @@ export default function AssetPage({ id, tick, org, activas = [], onDone }) {
   }
 
   const emisor = orgByMsp(activo.OwnerOrg);
-  const yo = clinicByKey(org);
 
   // Ceder es potestad de quien emitió el documento: el chaincode rechaza un
-  // GrantConsent que no venga de la org dueña del activo.
-  const soyDuenio = yo?.mspId === activo.OwnerOrg;
+  // GrantConsent que no venga de la org dueña del activo. Si esa institución
+  // está dada de baja no hay con qué firmar, y se dice en vez de ofrecer un
+  // botón que va a fallar.
+  const emisorActivo = activas.find((c) => c.mspId === activo.OwnerOrg);
+
+  // Solicitantes posibles: cualquier institución activa que no sea la emisora
+  // (la dueña ya tiene el recurso, pedirse acceso a sí misma no es un caso).
+  const solicitantes = activas.filter((c) => c.mspId !== activo.OwnerOrg);
+  const solicitanteValido = solicitantes.some((c) => c.key === solicitante)
+    ? solicitante
+    : solicitantes[0]?.key ?? '';
+  const quienPide = solicitantes.find((c) => c.key === solicitanteValido);
+
   const destinatarias = activas.filter((c) => c.mspId !== activo.OwnerOrg);
   const destinoValido = destinatarias.some((c) => c.key === destino)
     ? destino
@@ -132,7 +146,7 @@ export default function AssetPage({ id, tick, org, activas = [], onDone }) {
     && new Date(consentDestino.Expiry) > new Date();
 
   const ceder = () => correr('ceder', 'Consentimiento otorgado', () => api('/consents', {
-    org,
+    org: emisorActivo?.key,
     grantedToOrg: orgDestino.mspId,
     patientIDHash: activo.PatientIDHash,
     resourceTypes: [activo.ResourceType],
@@ -140,7 +154,7 @@ export default function AssetPage({ id, tick, org, activas = [], onDone }) {
   }));
 
   const revocar = () => correr('revocar', 'Consentimiento revocado', () => api('/consents/revoke', {
-    org,
+    org: emisorActivo?.key,
     grantedToOrg: orgDestino.mspId,
     patientIDHash: activo.PatientIDHash,
     // Lista vacía: revoca todo lo otorgado, no solo este tipo.
@@ -148,7 +162,7 @@ export default function AssetPage({ id, tick, org, activas = [], onDone }) {
   }));
 
   const pedirAcceso = () => correr('pedir', 'CheckAccess', () =>
-    api('/check-access', { org, fhirResourceID: id }));
+    api('/check-access', { org: solicitanteValido, fhirResourceID: id }));
 
   return (
     <>
@@ -164,14 +178,25 @@ export default function AssetPage({ id, tick, org, activas = [], onDone }) {
           {volver}
         </div>
 
-        {/* Las dos acciones del circuito, por clic. Cuál se ofrece depende de
-            con qué identidad se esté operando: el dueño cede, el resto pide. */}
+        {/* Las dos acciones del circuito, por clic. El acceso lo pide la
+            institución que se elija; ceder y revocar los firma la emisora, sin
+            elección posible: el chaincode rechaza un GrantConsent de otra org. */}
         <div className="acciones-activo">
-          <button className="primary" disabled={!!ocupado || !org} onClick={pedirAcceso}>
-            {ocupado === 'pedir' ? 'Evaluando…' : `Pedir acceso como ${yo?.label ?? org}`}
+          <label className="field-label">
+            Pedir acceso como
+            <select
+              value={solicitanteValido}
+              onChange={(e) => setSolicitante(e.target.value)}
+              disabled={!!ocupado || solicitantes.length < 2}
+            >
+              {solicitantes.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </label>
+          <button className="primary" disabled={!!ocupado || !quienPide} onClick={pedirAcceso}>
+            {ocupado === 'pedir' ? 'Evaluando…' : 'Pedir acceso'}
           </button>
 
-          {soyDuenio && orgDestino && (
+          {emisorActivo && orgDestino && (
             <>
               <label className="field-label">
                 Ceder a
@@ -189,15 +214,21 @@ export default function AssetPage({ id, tick, org, activas = [], onDone }) {
                 </button>
               ) : (
                 <button disabled={!!ocupado} onClick={ceder}>
-                  {ocupado === 'ceder' ? 'Cediendo…' : `Ceder ${activo.ResourceType} por un año`}
+                  {ocupado === 'ceder' ? 'Cediendo…' : `Ceder ${activo.ResourceType} por un año (firma ${emisor.label})`}
                 </button>
               )}
             </>
           )}
 
-          {!soyDuenio && (
+          {!emisorActivo && (
             <span className="hint">
-              Para ceder este documento hay que operar como {emisor.label}, que fue quien lo emitió.
+              {emisor.label} está dada de baja: sin su identidad no se puede ceder ni revocar este documento.
+            </span>
+          )}
+
+          {solicitantes.length === 0 && (
+            <span className="hint">
+              No hay otra institución activa que pueda pedir acceso a este documento.
             </span>
           )}
         </div>

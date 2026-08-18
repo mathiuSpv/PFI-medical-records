@@ -1,13 +1,18 @@
-// Panel de acciones: emite activos, otorga/revoca consentimiento y pide
-// acceso, siempre con la identidad de la org activa. El paciente se ingresa
-// en claro (p.ej. "paciente-demo-001") y el backend lo hashea (SHA-256) —
-// on-chain solo viaja el hash.
+// Panel de acciones: emite activos y otorga/revoca consentimiento. El paciente
+// se ingresa en claro (p.ej. "paciente-demo-001") y el backend lo convierte en
+// referencia opaca (HMAC con clave de red) — on-chain solo viaja esa referencia.
+//
+// La identidad que firma se elige acá adentro, en cada acción, y no en el
+// encabezado: la consola es de administración de la red y mira todo sin ser
+// ninguna institución en particular, pero Fabric exige que cada transacción la
+// someta una org con su MSP, y de eso dependen el ABAC y la auditoría. Por eso
+// el firmante aparece donde efectivamente hay una transacción que firmar.
+//
+// Pedir acceso no está acá: se pide desde la ficha del documento, que es donde
+// se ve de quién es el recurso y qué se le autorizó.
 import { useEffect, useState } from 'react';
-import { api, clinicByKey, orgByMsp, shortHash, useFetch } from '../api.js';
+import { api, clinicByKey } from '../api.js';
 
-// Exportados porque el ABM de la solapa de red emite activos con el mismo
-// formulario mínimo: si se duplicaran, una lista terminaría aceptando tipos que
-// la otra no.
 export const RESOURCE_TYPES = ['Observation', 'MedicationRequest', 'DiagnosticReport', 'Condition'];
 
 export const SAMPLE_RESOURCE = {
@@ -29,8 +34,15 @@ function defaultExpiry() {
   return d.toISOString().slice(0, 10);
 }
 
-export default function ActionsPanel({ org, clinics, tick, onDone }) {
+export default function ActionsPanel({ clinics, onDone }) {
   const [tab, setTab] = useState('emitir');
+  // Firmante de la acción. Arranca en la primera activa y se corrige sola si esa
+  // institución se da de baja mientras el panel está abierto.
+  const [org, setOrg] = useState(clinics[0]?.key);
+  useEffect(() => {
+    if (!clinics.some((c) => c.key === org)) setOrg(clinics[0]?.key);
+  }, [clinics, org]);
+
   const [patientId, setPatientId] = useState('paciente-demo-001');
   const [resourceType, setResourceType] = useState('Observation');
   const [resourceJSON, setResourceJSON] = useState(JSON.stringify(SAMPLE_RESOURCE, null, 2));
@@ -49,20 +61,7 @@ export default function ActionsPanel({ org, clinics, tick, onDone }) {
     }
   }, [destinatarias, targetKey]);
 
-  const yo = clinicByKey(org) ?? { label: org, color: 'var(--muted)' };
   const other = clinicByKey(targetKey);
-
-  // El acceso se pide por recurso concreto, no por tipo: el paciente y el tipo
-  // los deriva el chaincode del activo. Por eso acá hace falta la lista de
-  // activos emitidos y no alcanza con un combo de tipos.
-  const { data: assets } = useFetch('/assets', { deps: [tick] });
-  const [assetId, setAssetId] = useState('');
-  useEffect(() => {
-    if (!assets) return;
-    if (!assets.some((a) => a.FhirResourceID === assetId)) {
-      setAssetId(assets[0]?.FhirResourceID ?? '');
-    }
-  }, [assets, assetId]);
 
   const run = async (label, fn) => {
     setBusy(true);
@@ -101,19 +100,15 @@ export default function ActionsPanel({ org, clinics, tick, onDone }) {
     resourceTypes: total ? [] : grantTypes,
   }));
 
-  const pedirAcceso = () => run('CheckAccess', () => api('/check-access', { org, fhirResourceID: assetId }));
-
   return (
     <section className="panel">
       <div className="panel-head">
         <h2>Acciones</h2>
-        <span className="hint">
-          firmando como <strong style={{ color: yo.color }}>{yo.label}</strong>
-        </span>
+        <span className="hint">el pedido de acceso se hace desde la ficha del documento</span>
       </div>
 
       <div className="tabs">
-        {[['emitir', 'Emitir activo'], ['consentir', 'Consentimiento'], ['acceder', 'Pedir acceso']].map(([key, label]) => (
+        {[['emitir', 'Emitir activo'], ['consentir', 'Consentimiento']].map(([key, label]) => (
           <button key={key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => { setTab(key); setResult(null); }}>
             {label}
           </button>
@@ -121,14 +116,21 @@ export default function ActionsPanel({ org, clinics, tick, onDone }) {
       </div>
 
       <div className="form">
-        {/* En "Pedir acceso" el paciente no se ingresa: sale del activo elegido.
-            Mostrar el campo igual sería un control que no hace nada. */}
-        {tab !== 'acceder' && (
-          <label>
-            Paciente (va al ledger como referencia opaca, HMAC con clave de red)
-            <input value={patientId} onChange={(e) => setPatientId(e.target.value)} />
-          </label>
-        )}
+        <label>
+          {tab === 'emitir' ? 'Emite como' : 'Otorga'}
+          <select value={org ?? ''} onChange={(e) => setOrg(e.target.value)}>
+            {clinics.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+          </select>
+          <span className="hint">
+            la institución que firma la transacción: queda en el ledger como emisora del activo o como
+            otorgante del consentimiento
+          </span>
+        </label>
+
+        <label>
+          Paciente (va al ledger como referencia opaca, HMAC con clave de red)
+          <input value={patientId} onChange={(e) => setPatientId(e.target.value)} />
+        </label>
 
         {tab === 'emitir' && (
           <>
@@ -174,39 +176,9 @@ export default function ActionsPanel({ org, clinics, tick, onDone }) {
           </>
         )}
 
-        {tab === 'acceder' && (
-          <>
-            <label>
-              Recurso solicitado
-              <select value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={!assets?.length}>
-                {assets?.map((a) => (
-                  <option key={a.FhirResourceID} value={a.FhirResourceID}>
-                    {a.FhirResourceID} · {a.ResourceType} · paciente {shortHash(a.PatientIDHash, 8)} · {orgByMsp(a.OwnerOrg).label}
-                  </option>
-                ))}
-              </select>
-              <span className="hint">
-                el tipo y el paciente los toma el chaincode del activo, no se declaran acá
-              </span>
-            </label>
-            <button className="primary" disabled={busy || !assetId} onClick={pedirAcceso}>
-              Pedir acceso (CheckAccess on-chain)
-            </button>
-            {assets?.length === 0 && (
-              <div className="result pending">No hay activos emitidos todavía: emití uno primero.</div>
-            )}
-          </>
-        )}
-
         {busy && <div className="result pending">Enviando transacción…</div>}
         {result && !result.ok && <div className="result error"><strong>{result.label}</strong>: {result.error}</div>}
-        {result?.ok && result.label === 'CheckAccess' && (
-          <div className={`result decision ${result.data.decision === 'PERMIT' ? 'permit' : 'deny'}`}>
-            {result.data.decision}
-            {result.data.reason && <span className="reason"> — {result.data.reason}</span>}
-          </div>
-        )}
-        {result?.ok && result.label !== 'CheckAccess' && (
+        {result?.ok && (
           <div className="result ok">
             <strong>{result.label} OK</strong>
             {result.data.cid && <> · CID <code>{result.data.cid}</code></>}

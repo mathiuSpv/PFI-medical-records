@@ -4,7 +4,7 @@
 // el backend desenvuelve la clave con la clave privada de esa org, baja el
 // blob de IPFS y devuelve el recurso FHIR en claro — el círculo completo.
 import { useState } from 'react';
-import { api, fmtTs, mspLabelFor, orgByMsp, shortHash } from '../api.js';
+import { api, fmtTs, orgByMsp, shortHash } from '../api.js';
 
 function DeliveryCard({ delivery }) {
   const [decrypted, setDecrypted] = useState(null);
@@ -87,7 +87,7 @@ export default function EventFeed({ feed }) {
                   </span>
                   {alta ? ' se incorporó al bus' : ' fue dada de baja del bus'}
                   <div className="muted">
-                    <code>{mspLabelFor(item.mspId)}</code>
+                    <code>{item.mspId}</code>
                     {' · bloque '}{item.blockNumber}
                     {' · tx '}<code title={item.txId}>{shortHash(item.txId, 8)}</code>
                   </div>
