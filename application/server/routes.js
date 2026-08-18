@@ -11,6 +11,7 @@ const express = require('express');
 
 const { evaluateJSON, defaultOrgKey } = require('./connections');
 const actions = require('./actions');
+const blocks = require('./blocks');
 const clinics = require('./clinics');
 const health = require('./health');
 const keys = require('./keys');
@@ -48,6 +49,11 @@ module.exports = function buildRoutes(broadcast) {
     const { patientIDHash, grantedToOrg } = req.query;
     return evaluateJSON(orgOrDefault(req), 'GetConsentHistory', patientIDHash, grantedToOrg);
   }));
+
+  // Cabecera del bloque que contiene una transacción: es lo que permite ver en
+  // qué bloque quedó asentado un acceso, y no solo su TxID.
+  router.get('/blocks/by-tx/:txId', wrap((req) =>
+    blocks.blockByTxId(orgOrDefault(req), req.params.txId)));
 
   router.get('/deliveries', wrap(() => keys.deliveries));
 

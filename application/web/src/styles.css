@@ -25,8 +25,8 @@
   --muted: #566f85;     /* 5.2:1 sobre blanco, 4.6:1 sobre --panel-2 */
   --accent: #1668c4;    /* acción primaria, foco, selección */
   --accent-strong: #0f56a8;
-  --sc: #1668c4;        /* Clínica San Cristóbal */
-  --mn: #0f7551;        /* Clínica Montenegro (5.0:1 también sobre --panel-2) */
+  --sc: #1668c4;        /* institución fundadora 1 */
+  --mn: #0f7551;        /* institución fundadora 2 (5.0:1 también sobre --panel-2) */
   --permit: #0f7551;
   --deny: #c0203c;
   --warn: #8a5a06;
@@ -59,6 +59,7 @@ body {
 .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
 .header h1 { margin: 0; font-size: 20px; }
 .subtitle { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.header-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
 .org-switcher { display: flex; align-items: center; gap: 8px; }
 .org-switcher-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
 .org-btn {
@@ -102,6 +103,46 @@ body {
 .channel-info { fill: var(--muted); font-size: 11px; }
 .channel.locked .channel-name, .channel.locked .channel-info { fill: var(--muted); }
 .topology-note { fill: var(--muted); font-size: 11px; font-style: italic; }
+
+/* El canal-universal se dibuja como una barra que cruza el ancho y de la que
+   cada institución toma una derivación: es un bus, y como badge suelto no se
+   leía así. El trazo es más grueso que el de los conectores comunes para que la
+   jerarquía se vea sin depender del color. */
+.bus-rail { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.bus-stem { stroke: var(--accent); stroke-width: 1.5; }
+.bus-tap { stroke: var(--panel); stroke-width: 2; }
+.bus-pill rect { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; }
+.punta-offchain { fill: var(--line); }
+
+/* Columna de la institución con cuya identidad se mira la red. El relleno solo
+   no alcanzaba: con los colores cálidos de la paleta, un 7 % sobre blanco daba
+   un gris sucio que no se leía como selección. El borde del color de la
+   institución es lo que hace el trabajo; el relleno acompaña. */
+.col-activa { fill-opacity: 0.09; stroke-opacity: 0.5; stroke-width: 1.5; }
+
+/* IPFS va en una banda de borde punteado, separada de las cajas del ledger: el
+   punteado es lo que marca que está fuera de la cadena. */
+.offchain rect { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 6 4; }
+
+.leyenda text { fill: var(--muted); font-size: 11px; }
+.muestra-locked { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 3; }
+
+/* Nodo simulado: ni verde ni rojo. En vista previa no hay sonda de salud que
+   reportar y pintar el punto de verde sería inventar un estado. */
+.dot-sim { fill: var(--muted); }
+.topology.is-preview .node-box, .topology.is-preview .channel rect { stroke-dasharray: 5 3; }
+
+/* ---- control de vista previa ---- */
+.topology-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.preview-switch { display: flex; align-items: center; gap: 5px; }
+.preview-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.chip {
+  background: var(--panel); color: var(--muted); border: 1px solid var(--control);
+  border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; line-height: 1.4;
+  transition: border-color 160ms ease-out, color 160ms ease-out;
+}
+.chip:hover { color: var(--text); border-color: var(--accent); }
+.chip.active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 
 /* ---- tabs y formularios ---- */
 .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
@@ -216,6 +257,173 @@ code { font-family: var(--mono); font-size: 12px; }
 .op-log li.error { color: var(--deny); font-weight: 600; }
 /* La columna de acciones es angosta: el motivo y el botón van en una línea. */
 .cell-actions .btn-row { flex-wrap: nowrap; align-items: center; }
+
+/* ---- solapas de nivel superior ---- */
+.solapas { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.solapa {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 16px;
+  cursor: pointer; font: inherit; font-weight: 600;
+  transition: color 160ms ease-out, border-color 160ms ease-out;
+}
+.solapa:hover { color: var(--text); }
+.solapa.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---- grafo de datos ---- */
+/* Dos colores nuevos, y solo dos: el resto de los nodos toma el color de su
+   institución. Ambos pasan 4.5:1 sobre blanco porque también se usan como
+   texto en la leyenda. */
+:root {
+  --activo: #3f6480;
+}
+
+.grafo-controles { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.grafo-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .grafo-layout { grid-template-columns: 1fr; } }
+
+.grafo-lienzo { min-width: 0; position: relative; }
+/* Flotan sobre el lienzo, arriba a la derecha: son acciones sobre el mapa y no
+   sobre el panel, así que viven donde actúan. Reacomodar va primero porque es
+   la que se usa seguido; expandir queda pegada al borde. */
+.grafo-acciones { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; }
+.chip-icono {
+  background: var(--panel); width: 30px; height: 30px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1;
+}
+.grafo {
+  width: 100%; height: auto; display: block;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  touch-action: none;   /* el arrastre lo maneja el componente, no el scroll */
+  cursor: grab;
+}
+.grafo:active { cursor: grabbing; }
+
+/* Nodos: el círculo lleva un borde claro para despegarse de las aristas que le
+   llegan por detrás. */
+.nodo { cursor: pointer; }
+.nodo circle, .nodo rect { stroke: var(--panel); stroke-width: 2; }
+/* El rótulo se perfila con el color del lienzo para que se lea cuando cae
+   encima de una arista. */
+.nodo-label {
+  fill: var(--text); font-size: 11px; font-weight: 600; pointer-events: none;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+.n-org circle { fill: var(--accent); }
+.n-activo rect { fill: var(--activo); }
+/* El tipo FHIR va debajo del identificador, en menor jerarquía: identifica al
+   documento pero no es su nombre. */
+.nodo-sub-label {
+  fill: var(--muted); font-size: 10px; pointer-events: none;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+/* Una institución dada de baja se dibuja hueca: sigue en el grafo porque sus
+   activos y consentimientos siguen existiendo, pero ya no opera. */
+.nodo-baja circle { fill: var(--panel) !important; stroke: var(--deny); stroke-dasharray: 4 3; }
+.nodo-sel circle, .nodo-sel rect { stroke: var(--text); stroke-width: 3; }
+.ancla { fill: none; stroke: var(--control); stroke-width: 1; stroke-dasharray: 2 3; }
+
+/* Aristas */
+.arista { stroke-width: 1.5; fill: none; }
+.arista-hit { stroke: transparent; stroke-width: 14; cursor: pointer; }
+.arista-label {
+  fill: var(--text); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; pointer-events: none;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+}
+.punta-emitio { fill: var(--line); }
+/* Una sola clase de relación: la emisión. Los accesos no son aristas, viven
+   adentro de ella. */
+.rel-emitio { stroke: var(--line); }
+.arista-sel .arista { stroke-width: 3.5; }
+.grafo-vacio { fill: var(--muted); font-size: 14px; font-style: italic; }
+
+/* ---- página del activo ---- */
+/* Los hashes son largos y no se abrevian: en una vista de auditoría el valor
+   completo es el punto. Se parten donde entren en vez de desbordar. */
+.hash { word-break: break-all; }
+.props-anchas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; }
+.lista-simple { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+
+/* Fila de acciones del documento: los dos pasos del circuito quedan juntos y a
+   la vista, sin formulario de por medio. */
+.acciones-activo { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.acciones-activo select { background: var(--bg); color: var(--text); border: 1px solid var(--control); border-radius: 8px; padding: 8px 10px; font: inherit; }
+
+.accesos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.accesos > li { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.acceso-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+
+/* El bloque se despega del acceso que lo contiene: es un dato del ledger, no
+   del pedido, y conviene que se lea como una ficha aparte. */
+.bloque { margin-top: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.bloque-num { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+.bloque .props { margin: 0; }
+.bloque-pendiente { color: var(--muted); font-style: italic; }
+.bloque-error { color: var(--deny); background: #fbe6ea; border-color: var(--deny); }
+
+/* ---- ABM de la solapa de red ---- */
+/* ClinicsPanel y AssetsPanel se reutilizan tal cual, y traen su propia caja de
+   panel. Adentro del ABM esa caja sobra: quedaría un panel dentro de otro con
+   doble borde y doble sombra. */
+.abm-panel > .panel { border: none; box-shadow: none; padding: 0; background: none; }
+.abm-panel > .panel + .form,
+.abm-panel .form + .panel { margin-top: 14px; }
+.abm-panel .panel-head + .hint { display: block; margin-bottom: 12px; }
+
+/* Pantalla completa: el mapa se lleva todo el alto disponible y el panel de
+   detalle baja al pie, en ancho completo. Se sale con el botón o con Escape. */
+.grafo-expandido {
+  position: fixed; inset: 0; z-index: 60; margin: 0; border-radius: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.grafo-expandido .grafo-layout {
+  display: flex; flex-direction: column; grid-template-columns: none;
+  flex: 1; min-height: 0;
+}
+.grafo-expandido .grafo-lienzo { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.grafo-expandido .grafo { flex: 1; min-height: 0; height: auto; }
+.grafo-expandido .grafo-props { max-height: 32vh; overflow-y: auto; }
+/* Con el panel abajo hay ancho de sobra: las referencias van en fila en vez de
+   apilarse y comerse el alto que necesita el mapa. */
+.grafo-expandido .grafo-leyenda { flex-direction: row; flex-wrap: wrap; gap: 18px; }
+.grafo-expandido .props { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 20px; }
+.grafo-expandido .auditoria { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+/* Panel de propiedades */
+.grafo-props { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.grafo-props h3 { margin: 0 0 4px; font-size: 14px; word-break: break-word; }
+.grafo-leyenda { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.grafo-leyenda li { display: flex; align-items: center; gap: 8px; }
+.punto { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.punto.n-org { background: var(--accent); }
+/* Misma forma que en el lienzo: la referencia tiene que coincidir con lo que se
+   dibuja, no solo con el color. */
+.hoja { width: 16px; height: 11px; border-radius: 2px; background: var(--activo); flex: none; }
+/* Mismo rombo que en el lienzo: la referencia tiene que coincidir con la forma
+   que se dibuja, no solo con el color. */
+.raya { width: 16px; height: 3px; border-radius: 2px; flex: none; }
+.raya.rel-emitio { background: var(--line); }
+
+/* Cadena de evaluaciones de una solicitud: cada decisión del chaincode con su
+   motivo y su TxID. Es el contenido auditable de la relación. */
+.auditoria { list-style: none; margin: 8px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.auditoria li {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; display: flex; flex-direction: column; gap: 3px;
+}
+/* Las evaluaciones individuales van indentadas dentro de su solicitante: son el
+   detalle de esa solicitud, no otra lista al mismo nivel. */
+.evaluaciones {
+  list-style: none; margin: 6px 0 0; padding: 0 0 0 10px;
+  border-left: 2px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px; font-size: 11.5px;
+}
+.txt-permit { color: var(--permit); font-weight: 700; }
+.txt-deny { color: var(--deny); font-weight: 700; }
+
+.props { margin: 8px 0 12px; display: flex; flex-direction: column; gap: 8px; }
+.props dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.props dd { margin: 2px 0 0; font-size: 13px; word-break: break-word; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

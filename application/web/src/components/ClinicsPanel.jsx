@@ -85,7 +85,7 @@ export default function ClinicsPanel({ clinics, onChanged }) {
                 <span className="org-badge" style={{ color: c.color }}>{c.label}</span>
                 {c.fundadora && <span className="hint"> · fundadora</span>}
               </td>
-              <td><code>{c.mspId}</code></td>
+              <td><code>{c.mspLabel ?? c.mspId}</code></td>
               <td><code>{c.peerEndpoint?.split(':')[1]}</code></td>
               <td><EstadoBadge estado={c.estado} /></td>
               <td>

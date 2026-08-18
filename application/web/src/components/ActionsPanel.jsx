@@ -5,9 +5,12 @@
 import { useEffect, useState } from 'react';
 import { api, clinicByKey, orgByMsp, shortHash, useFetch } from '../api.js';
 
-const RESOURCE_TYPES = ['Observation', 'MedicationRequest', 'DiagnosticReport', 'Condition'];
+// Exportados porque el ABM de la solapa de red emite activos con el mismo
+// formulario mínimo: si se duplicaran, una lista terminaría aceptando tipos que
+// la otra no.
+export const RESOURCE_TYPES = ['Observation', 'MedicationRequest', 'DiagnosticReport', 'Condition'];
 
-const SAMPLE_RESOURCE = {
+export const SAMPLE_RESOURCE = {
   resourceType: 'Observation',
   id: 'obs-demo-001',
   status: 'final',
