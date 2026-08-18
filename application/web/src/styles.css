@@ -370,8 +370,9 @@ code { font-family: var(--mono); font-size: 12px; }
 .abm-panel .form + .panel { margin-top: 14px; }
 .abm-panel .panel-head + .hint { display: block; margin-bottom: 12px; }
 
-/* Pantalla completa: el mapa se lleva todo el alto disponible y el panel de
-   detalle baja al pie, en ancho completo. Se sale con el botón o con Escape. */
+/* Ampliado: el cuadro ocupa toda la ventana del navegador —sin salir de la
+   pagina— y el panel de detalle baja al pie, en ancho completo. Se vuelve al
+   tamaño normal con el mismo boton. */
 .grafo-expandido {
   position: fixed; inset: 0; z-index: 60; margin: 0; border-radius: 0;
   display: flex; flex-direction: column; overflow: hidden;
@@ -380,8 +381,12 @@ code { font-family: var(--mono); font-size: 12px; }
   display: flex; flex-direction: column; grid-template-columns: none;
   flex: 1; min-height: 0;
 }
-.grafo-expandido .grafo-lienzo { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.grafo-expandido .grafo { flex: 1; min-height: 0; height: auto; }
+/* En pantalla completa el SVG se saca del flujo. Con width:100% y height:auto
+   su alto lo fija el aspect ratio del viewBox, que en una pantalla ancha da mas
+   alto que la pantalla y estira la pagina entera en vez de ajustarse al marco.
+   Posicionado absoluto llena el hueco que le deja el flex y nunca lo impone. */
+.grafo-expandido .grafo-lienzo { flex: 1; min-height: 0; overflow: hidden; }
+.grafo-expandido .grafo { position: absolute; inset: 0; width: 100%; height: 100%; }
 .grafo-expandido .grafo-props { max-height: 32vh; overflow-y: auto; }
 /* Con el panel abajo hay ancho de sobra: las referencias van en fila en vez de
    apilarse y comerse el alto que necesita el mapa. */

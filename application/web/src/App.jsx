@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, esGenerico, idDeRuta, setGenerico, useClinics, useRuta, useSSE } from './api.js';
+import { RUTA_MAPA, api, esGenerico, idDeRuta, setGenerico, useClinics, useRuta, useSSE } from './api.js';
 import TopologyPanel from './components/TopologyPanel.jsx';
 import ActionsPanel from './components/ActionsPanel.jsx';
 import ClinicsPanel from './components/ClinicsPanel.jsx';
@@ -26,9 +26,11 @@ export default function App() {
   const [solapa, setSolapa] = useState('operacion');
   const bump = () => setTick((t) => t + 1);
 
-  // Ruta por hash: '#/activo/<id>' abre la página del documento, cualquier otra
-  // cosa es el dashboard.
-  const activoId = idDeRuta(useRuta());
+  // Ruta por hash: '#/activo/<id>' abre la página del documento, '#/mapa' la
+  // vista dedicada del grafo, cualquier otra cosa es el dashboard.
+  const ruta = useRuta();
+  const activoId = idDeRuta(ruta);
+  const soloMapa = ruta === RUTA_MAPA;
 
   // Modo genérico: enmascara los nombres de las instituciones en toda la UI.
   // El estado real vive en api.js (y en localStorage); acá se replica solo para
@@ -73,6 +75,10 @@ export default function App() {
     setFeed((f) => [{ ...msg, receivedAt: Date.now() }, ...f].slice(0, 100));
     bump();
   });
+
+  // Vista del mapa: se devuelve antes del encabezado a propósito, porque la
+  // idea es que no haya nada más en pantalla que la topología.
+  if (soloMapa) return <GraphPanel clinics={clinics} tick={tick} soloMapa />;
 
   return (
     <div className="app">

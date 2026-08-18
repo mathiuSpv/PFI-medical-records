@@ -7,14 +7,17 @@
 // El layout NO se anima: se calcula entero y se pinta ya acomodado. Ver el
 // grafo sacudirse hasta encontrar su lugar no aporta y se ve mal.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { irA, orgByMsp, rutaActivo, useFetch } from '../api.js';
+import { RUTA_MAPA, irA, orgByMsp, rutaActivo, useFetch } from '../api.js';
 import { TIPOS, acomodar, construirGrafo } from '../grafo.js';
 
-// Lienzo deliberadamente bajo: el grafo comparte la solapa con el ABM, que va
-// abajo, y un mapa alto empujaba los formularios fuera de la pantalla. En
-// pantalla completa el SVG se estira y recupera todo el alto.
+// El lienzo arranca bajo —el grafo comparte la solapa con el ABM, que va abajo,
+// y un mapa alto empuja los formularios fuera de la pantalla— pero crece con la
+// cantidad de nodos: con 30 y pico apretados en 440 px los rótulos se pisan.
+// En pantalla completa el SVG se estira y recupera todo el alto igual.
 const W = 1120;
-const H = 440;
+const H_MIN = 440;
+const H_MAX = 900;
+const altoPara = (nodos) => Math.min(H_MAX, Math.max(H_MIN, 300 + nodos * 13));
 
 // Distancia del centro del nodo a su borde en la dirección dada. El activo se
 // dibuja como rectángulo, así que un radio fijo dejaría la punta de la flecha
@@ -30,12 +33,11 @@ function radioBorde(nodo, dx, dy) {
   return ax * hh > ay * hw ? (hw * d) / ax : (hh * d) / ay;
 }
 
-export default function GraphPanel({ clinics, tick }) {
+export default function GraphPanel({ clinics, tick, soloMapa = false }) {
   const { data: assets } = useFetch('/assets', { deps: [tick] });
   const { data: consents } = useFetch('/consents', { deps: [tick] });
   const { data: logs } = useFetch('/access-logs', { deps: [tick] });
 
-  const [expandido, setExpandido] = useState(false);
   const [sel, setSel] = useState(null);
   const [hover, setHover] = useState(null);
   const [vista, setVista] = useState({ x: 0, y: 0, k: 1 });
@@ -57,6 +59,8 @@ export default function GraphPanel({ clinics, tick }) {
     [clinics, assets, consents, logs],
   );
 
+  const H = altoPara(grafo.nodos.length);
+
   // El layout se resuelve completo antes de pintar. Las posiciones de los nodos
   // que ya estaban se conservan: si no, emitir un activo reordenaría todo el
   // grafo y se perdería la referencia visual.
@@ -74,7 +78,7 @@ export default function GraphPanel({ clinics, tick }) {
     }
     nodosRef.current = nodos;
     setFrame((f) => f + 1);
-  }, [grafo]);
+  }, [grafo, H]);
 
   const reacomodar = useCallback(() => {
     const nodos = grafo.nodos.map((n) => ({ ...n }));
@@ -82,16 +86,8 @@ export default function GraphPanel({ clinics, tick }) {
     nodosRef.current = nodos;
     setVista({ x: 0, y: 0, k: 1 });
     setFrame((f) => f + 1);
-  }, [grafo]);
+  }, [grafo, H]);
 
-  // Salir de pantalla completa con Escape: es lo que espera cualquiera que la
-  // haya abierto sin querer.
-  useEffect(() => {
-    if (!expandido) return undefined;
-    const cerrar = (e) => { if (e.key === 'Escape') setExpandido(false); };
-    window.addEventListener('keydown', cerrar);
-    return () => window.removeEventListener('keydown', cerrar);
-  }, [expandido]);
 
   // Pantalla -> coordenadas del grafo. Se toma la matriz del grupo que lleva el
   // transform de zoom/pan, así la conversión ya contempla la vista actual.
@@ -161,7 +157,7 @@ export default function GraphPanel({ clinics, tick }) {
   const cargando = !assets || !consents || !logs;
 
   return (
-    <section className={`panel ${expandido ? 'grafo-expandido' : ''}`}>
+    <section className={`panel ${soloMapa ? 'grafo-expandido' : ''}`}>
       <div className="panel-head">
         <div>
           <h2>Trazabilidad de los activos</h2>
@@ -183,14 +179,16 @@ export default function GraphPanel({ clinics, tick }) {
             >
               ⟳
             </button>
+            {/* El mismo icono en los dos sentidos: lleva a la vista dedicada
+                del mapa y, estando en ella, vuelve al dashboard. */}
             <button
-              className={`chip chip-icono ${expandido ? 'active' : ''}`}
-              onClick={() => setExpandido((v) => !v)}
-              aria-pressed={expandido}
-              title={expandido ? 'Volver al tamaño normal (Esc)' : 'Ocupar toda la pantalla'}
-              aria-label={expandido ? 'Contraer el mapa' : 'Expandir el mapa'}
+              className={`chip chip-icono ${soloMapa ? 'active' : ''}`}
+              onClick={() => irA(soloMapa ? '/' : RUTA_MAPA)}
+              aria-pressed={soloMapa}
+              title={soloMapa ? 'Volver al dashboard' : 'Ver solo el mapa'}
+              aria-label={soloMapa ? 'Volver al dashboard' : 'Ver solo el mapa'}
             >
-              {expandido ? '⤡' : '⤢'}
+              {soloMapa ? '⤡' : '⤢'}
             </button>
           </div>
 
@@ -244,11 +242,6 @@ export default function GraphPanel({ clinics, tick }) {
                       onPointerEnter={() => setHover(clave)}
                       onPointerLeave={() => setHover((h) => (h === clave ? null : h))}
                     />
-                    {/* Cuántos accesos recibió el documento se muestra siempre:
-                        es lo que dice si esa línea vale la pena abrirse. */}
-                    <text x={(ix + fx) / 2} y={(iy + fy) / 2 - 6} className="arista-label" textAnchor="middle">
-                      {hover === clave ? `EMITIÓ · ${a.detalle}` : a.detalle}
-                    </text>
                   </g>
                 );
               })}
