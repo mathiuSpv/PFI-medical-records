@@ -59,15 +59,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div>
-          <h1>PFI — Consola de red</h1>
-          <p className="subtitle">
-            Hyperledger Fabric + IPFS · administración del bus: todas las instituciones, activos y consentimientos
-          </p>
-        </div>
-        <div className="header-tools">
-          <span className="hint">
-            {activas.length} institución{activas.length === 1 ? '' : 'es'} activa{activas.length === 1 ? '' : 's'} en el bus
-          </span>
+          <h1>Panel de Prueba</h1>
         </div>
       </header>
 

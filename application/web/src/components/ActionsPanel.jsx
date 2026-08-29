@@ -51,6 +51,24 @@ export default function ActionsPanel({ clinics, onDone }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
+  // Verificación de identidad simulada (RENAPER mock): informativa, no
+  // condiciona ninguna transacción — ver ActionsPanel arriba.
+  const [dni, setDni] = useState('');
+  const [renaper, setRenaper] = useState(null);
+  const [renaperBusy, setRenaperBusy] = useState(false);
+
+  const validarIdentidad = async () => {
+    setRenaperBusy(true);
+    setRenaper(null);
+    try {
+      setRenaper(await api('/renaper/validar', { dni }));
+    } catch (err) {
+      setRenaper({ found: false, error: err.message });
+    } finally {
+      setRenaperBusy(false);
+    }
+  };
+
   // Con más de dos clínicas ya no existe "la otra": hay que elegir a quién se
   // le otorga el consentimiento.
   const destinatarias = clinics.filter((c) => c.key !== org);
@@ -104,7 +122,6 @@ export default function ActionsPanel({ clinics, onDone }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Acciones</h2>
-        <span className="hint">el pedido de acceso se hace desde la ficha del documento</span>
       </div>
 
       <div className="tabs">
@@ -121,16 +138,28 @@ export default function ActionsPanel({ clinics, onDone }) {
           <select value={org ?? ''} onChange={(e) => setOrg(e.target.value)}>
             {clinics.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
           </select>
-          <span className="hint">
-            la institución que firma la transacción: queda en el ledger como emisora del activo o como
-            otorgante del consentimiento
-          </span>
         </label>
 
         <label>
-          Paciente (va al ledger como referencia opaca, HMAC con clave de red)
+          Paciente
           <input value={patientId} onChange={(e) => setPatientId(e.target.value)} />
         </label>
+
+        <div className="renaper-check">
+          <label>
+            Código RENAPER
+            <input value={dni} onChange={(e) => setDni(e.target.value)} placeholder="DNI, p.ej. 30111222" />
+          </label>
+          <button disabled={renaperBusy || !dni.trim()} onClick={validarIdentidad}>
+            {renaperBusy ? 'Validando…' : 'Validar identidad'}
+          </button>
+          {renaper?.found && (
+            <span className="badge permit">
+              {renaper.persona.nombre} {renaper.persona.apellido} · DNI {renaper.dni}
+            </span>
+          )}
+          {renaper && !renaper.found && <span className="badge deny">no encontrado en RENAPER</span>}
+        </div>
 
         {tab === 'emitir' && (
           <>
@@ -141,7 +170,7 @@ export default function ActionsPanel({ clinics, onDone }) {
               </select>
             </label>
             <label>
-              Recurso (JSON — se cifra con AES-256-GCM y va a IPFS; el ledger solo ve el CID)
+              Recurso
               <textarea rows="8" value={resourceJSON} onChange={(e) => setResourceJSON(e.target.value)} spellCheck="false" />
             </label>
             <button className="primary" disabled={busy} onClick={emitir}>Cifrar, subir a IPFS y emitir</button>

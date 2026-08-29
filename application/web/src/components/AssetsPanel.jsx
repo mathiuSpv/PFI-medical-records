@@ -9,7 +9,6 @@ export default function AssetsPanel({ tick }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Activos emitidos</h2>
-        <span className="hint">{assets ? `${assets.length} en el ledger` : ''}</span>
       </div>
       {error && <div className="result error">{error}</div>}
       <table>
@@ -30,7 +29,7 @@ export default function AssetsPanel({ tick }) {
               </tr>
             );
           })}
-          {assets?.length === 0 && <tr><td colSpan="6" className="empty">Sin activos todavía — emití uno desde Acciones.</td></tr>}
+          {assets?.length === 0 && <tr><td colSpan="6" className="empty">Sin activos.</td></tr>}
         </tbody>
       </table>
     </section>

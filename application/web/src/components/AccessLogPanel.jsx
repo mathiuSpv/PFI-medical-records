@@ -11,7 +11,6 @@ export default function AccessLogPanel({ tick }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Auditoría de accesos</h2>
-        <span className="hint">{sorted ? `${sorted.length} evaluaciones en el ledger` : ''}</span>
       </div>
       {error && <div className="result error">{error}</div>}
       <table>

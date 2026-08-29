@@ -15,6 +15,7 @@ const blocks = require('./blocks');
 const clinics = require('./clinics');
 const health = require('./health');
 const keys = require('./keys');
+const renaper = require('./renaper');
 
 const wrap = (handler) => async (req, res) => {
   try {
@@ -62,6 +63,10 @@ module.exports = function buildRoutes(broadcast) {
   router.post('/consents/revoke', wrap((req) => actions.revokeConsent(req.body)));
   router.post('/check-access', wrap((req) => actions.checkAccess(req.body)));
   router.post('/deliveries/:id/decrypt', wrap((req) => keys.decryptDelivery(req.params.id, req.body.org)));
+
+  // Verificación de identidad simulada (RENAPER mock): informativa, no
+  // condiciona ninguna transacción del chaincode.
+  router.post('/renaper/validar', wrap((req) => renaper.validar(req.body?.dni)));
 
   return router;
 };

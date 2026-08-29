@@ -1,0 +1,5 @@
+[
+  { "dni": "30111222", "patientId": "paciente-demo-001", "nombre": "Lucía", "apellido": "Fernández", "fechaNacimiento": "1988-04-12", "sexo": "F" },
+  { "dni": "27333444", "patientId": "paciente-demo-002", "nombre": "Martín", "apellido": "Coria", "fechaNacimiento": "1975-11-03", "sexo": "M" },
+  { "dni": "40555666", "patientId": "paciente-demo-003", "nombre": "Valentina", "apellido": "Guzmán", "fechaNacimiento": "2001-07-22", "sexo": "F" }
+]

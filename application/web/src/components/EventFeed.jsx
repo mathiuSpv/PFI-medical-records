@@ -65,7 +65,7 @@ export default function EventFeed({ feed }) {
         <span className="hint">SSE · canal-universal</span>
       </div>
       <div className="feed">
-        {feed.length === 0 && <div className="empty">Sin eventos todavía. Un CheckAccess con PERMIT dispara el primero.</div>}
+        {feed.length === 0 && <div className="empty">Sin eventos.</div>}
         {feed.map((item, i) => {
           if (item.type === 'key-delivery') {
             return <DeliveryCard key={item.delivery.id} delivery={item.delivery} />;
