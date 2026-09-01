@@ -161,7 +161,6 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
       <div className="panel-head">
         <div>
           <h2>Trazabilidad de los activos</h2>
-          <span className="hint">cada emisión guarda quién pidió el documento, cuándo y qué respondió el chaincode</span>
         </div>
       </div>
 
@@ -310,10 +309,6 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
                 <li><span className="hoja" /> Activo médico digital</li>
                 <li><span className="raya rel-emitio" /> Emitió el documento</li>
               </ul>
-              <p className="hint">
-                Clic en un documento o en su línea para abrirlo: ahí está cada acceso con el bloque
-                del ledger donde quedó asentado.
-              </p>
             </>
           )}
 

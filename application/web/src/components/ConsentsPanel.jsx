@@ -34,7 +34,6 @@ export default function ConsentsPanel({ tick }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Consentimientos</h2>
-        <span className="hint">deny por defecto — solo existe lo otorgado explícitamente</span>
       </div>
       {error && <div className="result error">{error}</div>}
       <table>
@@ -78,7 +77,7 @@ export default function ConsentsPanel({ tick }) {
               ),
             ];
           })}
-          {consents?.length === 0 && <tr><td colSpan="7" className="empty">Sin consentimientos — todo acceso cruzado da DENY.</td></tr>}
+          {consents?.length === 0 && <tr><td colSpan="7" className="empty">Sin consentimientos.</td></tr>}
         </tbody>
       </table>
     </section>

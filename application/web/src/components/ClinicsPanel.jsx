@@ -61,9 +61,6 @@ export default function ClinicsPanel({ clinics, onChanged }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Instituciones del bus</h2>
-        <span className="hint">
-          {activas} activa{activas === 1 ? '' : 's'} · el alta crea una org Fabric real y actualiza la config del canal
-        </span>
       </div>
 
       <table className="table">
@@ -119,7 +116,6 @@ export default function ClinicsPanel({ clinics, onChanged }) {
             placeholder="p.ej. rosario"
             spellCheck="false"
           />
-          <span className="hint">minúsculas y dígitos, 3-16 · será el host, el contenedor y el canal privado</span>
         </label>
         <label>
           Nombre de la institución
