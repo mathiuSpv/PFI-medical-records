@@ -16,13 +16,20 @@ const clinics = require('./clinics');
 const health = require('./health');
 const keys = require('./keys');
 const renaper = require('./renaper');
+const conformance = require('../src/conformance');
 
 const wrap = (handler) => async (req, res) => {
   try {
     res.json(await handler(req));
   } catch (err) {
     const message = err.details?.[0]?.message || err.message || String(err);
-    res.status(500).json({ error: message });
+    // Un recurso no conforme no es un fallo del bus sino una entrada rechazada:
+    // sale como 422 con el detalle de qué elemento falló, para que el emisor
+    // pueda corregirlo. El resto sigue saliendo como 500.
+    const status = Number.isInteger(err.status) ? err.status : 500;
+    const body = { error: message };
+    if (err.report) body.conformance = err.report;
+    res.status(status).json(body);
   }
 };
 
@@ -66,6 +73,15 @@ module.exports = function buildRoutes(broadcast) {
 
   // Verificación de identidad simulada (RENAPER mock): informativa, no
   // condiciona ninguna transacción del chaincode.
+  // Valida un recurso sin emitirlo. Sirve al tablero para mostrar el
+  // resultado de la capa de conformidad y a la batería de pruebas para
+  // medir aceptación y rechazo sin tocar la red ni IPFS.
+  router.post('/conformance/validate', wrap((req) =>
+    conformance.validateResource(req.body?.resourceType, req.body?.resource)));
+  router.get('/conformance/profiles', wrap(() => ({
+    resourceTypes: conformance.supportedResourceTypes(),
+  })));
+
   router.post('/renaper/validar', wrap((req) => renaper.validar(req.body?.dni)));
 
   return router;
