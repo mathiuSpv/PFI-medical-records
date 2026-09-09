@@ -1,5 +1,5 @@
 // Listener de eventos de chaincode standalone, por org — corre en su propia
-// terminal y se queda escuchando AccessPermitted en canal-universal hasta
+// terminal y se queda escuchando AccessPermitted en canal-nacional hasta
 // Ctrl+C. Uso: node src/listen.js <key de clínica>
 'use strict';
 

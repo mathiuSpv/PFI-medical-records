@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# deployChaincode.sh
+# deployChaincode.sh [canal] [org1 org2 ...]
 #
 # Empaqueta, instala, aprueba y commitea el chaincode de consentimiento
-# (../chaincode) en canal-universal, con ambas clínicas como endorsers
-# (política por default: MAJORITY Endorsement, que con 2 orgs exige a las
-# dos). Idempotente: si ya está commiteado en esta versión/secuencia, no
-# vuelve a instalar.
+# (../chaincode) en un canal, con las orgs indicadas como endorsers (política
+# por default: MAJORITY Endorsement). Idempotente: si ya está commiteado en
+# esta versión/secuencia, no vuelve a instalar.
+#
+# Sin argumentos despliega en canal-nacional con todas las clínicas activas.
+# network.sh lo invoca además una vez por canal jurisdiccional, con las
+# clínicas de esa provincia: el intercambio intrajurisdiccional se resuelve en
+# el canal de la provincia, de modo que el chaincode tiene que estar también
+# ahí. Las bitácoras internas no llevan chaincode: son registro, no bus.
 
 set -euo pipefail
 
@@ -18,15 +23,22 @@ CC_SRC_PATH="${NETWORK_HOME}/../chaincode"
 # ./network.sh deployCC); el flujo documentado sigue siendo redeploy fresco.
 : "${CC_VERSION:=1.0}"
 : "${CC_SEQUENCE:=1}"
-CHANNEL_NAME="canal-universal"
+CHANNEL_NAME="${1:-canal-nacional}"
 DELAY=3
 MAX_RETRY=5
+shift || true
 
 # Las orgs salen del registro de clínicas, no de una lista fija: así un
-# redeploy después de un alta instala y aprueba también en las nuevas.
+# redeploy después de un alta instala y aprueba también en las nuevas. Si se
+# pasan explícitamente, se respetan: es lo que permite acotar el despliegue a
+# los miembros de un canal jurisdiccional.
 registryRequire
 ORGS=()
-mapfile -t ORGS < <(clinicKeys activa)
+if [ "$#" -gt 0 ]; then
+  ORGS=("$@")
+else
+  mapfile -t ORGS < <(clinicKeys activa)
+fi
 [ ${#ORGS[@]} -ge 1 ] || fatalln "No hay clínicas activas en el registro"
 
 infoln "Vendorizando dependencias Go en ${CC_SRC_PATH}"

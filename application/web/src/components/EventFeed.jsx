@@ -62,7 +62,7 @@ export default function EventFeed({ feed }) {
     <section className="panel feed-panel">
       <div className="panel-head">
         <h2>Eventos en vivo</h2>
-        <span className="hint">SSE · canal-universal</span>
+        <span className="hint">SSE · canal-nacional</span>
       </div>
       <div className="feed">
         {feed.length === 0 && <div className="empty">Sin eventos.</div>}

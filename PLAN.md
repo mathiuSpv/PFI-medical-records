@@ -61,13 +61,13 @@ diseño de canales es el mismo, generalizado a "canal privado por org").
 - [x] `network/compose/compose-network.yaml`: orderer + peer0.generica1 + peer0.generica2
       (Docker-in-Docker montado en los peers para el chaincode builder legacy, mismo
       patrón que test-network)
-- [x] Canal público `canal-universal` (ambas orgs como miembros de aplicación)
+- [x] Canal público `canal-nacional` (ambas orgs como miembros de aplicación)
 - [x] Canal privado `canal-generica-1` (solo ClinicaGenerica1MSP) y
       `canal-generica-2` (solo ClinicaGenerica2MSP) — bitácora interna por org,
       orderer compartido con el resto de los canales
 - [x] `network/network.sh {up|createChannels|down}` — probado punta a punta: los 3
       canales quedan creados y unidos, `peer channel list` confirma que cada peer
-      solo ve `canal-universal` + su propio canal privado (aislamiento correcto)
+      solo ve `canal-nacional` + su propio canal privado (aislamiento correcto)
 
 ## Paso 3 — Chaincode Go (`chaincode/`)
 
@@ -77,7 +77,7 @@ diseño de canales es el mismo, generalizado a "canal privado por org").
 - [x] `CheckAccess(resourceType, patientIDHash)` — ABAC: consentimiento vigente + scope + expiry; registra PERMIT/DENY en ledger (auditoría con TxID, timestamp, requesterOrg, resourceType, reason) vía `GetAccessLog`
 - [x] Evento de chaincode `AccessPermitted` ante PERMIT (para que la app emisora dispare entrega de clave — paso 5)
 - [x] Restricción: determinista (timestamp vía `ctx.GetStub().GetTxTimestamp()`, nunca `time.Now()`; listas siempre dedupeadas+ordenadas antes de persistir), sin llamadas de red, solo `ChaincodeStub`/`ClientIdentity`
-- [x] Desplegado en `canal-universal` vía `network/network.sh deployCC` (nuevo comando), probado con CLI `peer`: flujo completo emit → deny sin consentimiento → grant → permit → deny por resource type no autorizado → revocación parcial → intento de revocar por la org no otorgante (rechazado) → revocación total → deny final → historial con las 2 versiones
+- [x] Desplegado en `canal-nacional` vía `network/network.sh deployCC` (nuevo comando), probado con CLI `peer`: flujo completo emit → deny sin consentimiento → grant → permit → deny por resource type no autorizado → revocación parcial → intento de revocar por la org no otorgante (rechazado) → revocación total → deny final → historial con las 2 versiones
 
 Desvío deliberado del checklist original: `CheckAccess` no recibe `requester_org` como
 argumento — se toma de `ctx.GetClientIdentity().GetMSPID()` (la identidad que firma la
@@ -195,7 +195,7 @@ como filas de una tabla. Post-etapa-1 (no estaba en el plan original).
       `peer channel update` agrega la del emisor, firmar con todas duplicaría identidad),
       `modifyChannelConfig` y `setAnchorPeerFor` (extraído de `createChannel.sh`, que
       ahora lo reusa).
-- [x] `addOrg.sh`: cryptogen → `-printOrg` → config update de `canal-universal` firmado
+- [x] `addOrg.sh`: cryptogen → `-printOrg` → config update de `canal-nacional` firmado
       por las existentes → peer → join + anchor → canal privado → install/approve del
       chaincode → `RegisterClinic`. Probado: la org nueva endosa y opera (DENY sin
       consentimiento → grant → PERMIT).
@@ -214,7 +214,7 @@ como filas de una tabla. Post-etapa-1 (no estaba en el plan original).
       (dos config updates concurrentes se pisan por versión).
 - [x] Front: panel "Instituciones del bus" (alta, baja con motivo, estado local vs
       on-chain vs salud del nodo, log de progreso), topología SVG calculada para N
-      clínicas con `canal-universal` como bus, selector de org dinámico y destinatario
+      clínicas con `canal-nacional` como bus, selector de org dinámico y destinatario
       del consentimiento por `select`.
 - [x] Verificado de punta a punta por CLI y por el dashboard: alta → la nueva opera →
       baja → queda `BAJA` on-chain con autor y motivo, fuera de la config del canal, y

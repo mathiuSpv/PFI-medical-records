@@ -1,6 +1,6 @@
 // Seudonimización del identificador de paciente antes de que toque el ledger.
 //
-// El problema que resuelve: `canal-universal` guarda el identificador del
+// El problema que resuelve: `canal-nacional` guarda el identificador del
 // paciente seudonimizado y en claro para todos los miembros del canal. Con un
 // hash pelado (SHA-256 del DNI, que es lo que hacía antes esta capa) la
 // seudonimización es aparente: el espacio de DNI argentinos son ~10^8 valores,

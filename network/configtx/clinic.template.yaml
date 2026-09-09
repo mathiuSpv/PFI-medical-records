@@ -4,7 +4,7 @@
 # usa para dos cosas distintas:
 #
 #   1. `configtxgen -printOrg __MSPID__` -> definición JSON de la org, que se
-#      inyecta en el config de canal-universal (el alta real de la membresía).
+#      inyecta en el config de canal-nacional (el alta real de la membresía).
 #   2. `configtxgen -profile __CHANNEL_PROFILE__ -outputBlock ...` -> bloque de
 #      génesis de su canal privado (bitácora interna, único miembro ella misma).
 #
@@ -29,6 +29,8 @@ Organizations:
         Rule: "OR('OrdererMSP.admin')"
     OrdererEndpoints:
       - orderer.example.com:7050
+      - orderer2.example.com:8050
+      - orderer3.example.com:10050
 
   - &NuevaClinica
     Name: __MSPID__
@@ -80,6 +82,8 @@ Application: &ApplicationDefaults
 Orderer: &OrdererDefaults
   Addresses:
     - orderer.example.com:7050
+    - orderer2.example.com:8050
+    - orderer3.example.com:10050
   BatchTimeout: 2s
   BatchSize:
     MaxMessageCount: 10
@@ -88,10 +92,20 @@ Orderer: &OrdererDefaults
   OrdererType: etcdraft
   EtcdRaft:
     Consenters:
+      # Los tres nodos del servicio de ordenamiento. Un canal creado con un solo
+      # consenter no tendría réplica aunque la red tenga tres nodos corriendo.
       - Host: orderer.example.com
         Port: 7050
         ClientTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
         ServerTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+      - Host: orderer2.example.com
+        Port: 8050
+        ClientTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer2.example.com/tls/server.crt
+        ServerTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer2.example.com/tls/server.crt
+      - Host: orderer3.example.com
+        Port: 10050
+        ClientTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer3.example.com/tls/server.crt
+        ServerTLSCert: __NETWORK_HOME__/organizations/ordererOrganizations/example.com/orderers/orderer3.example.com/tls/server.crt
   Organizations:
     - *OrdererOrg
   Policies:

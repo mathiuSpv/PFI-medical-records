@@ -83,7 +83,7 @@ async function main() {
     // Indexado por recurso: dos activos del mismo tipo y paciente ya no se pisan.
     keyStore.set(fhirResourceID, aesKey);
 
-    // --- 2) EmitAsset: metadatos públicos en canal-universal ---------------
+    // --- 2) EmitAsset: metadatos públicos en canal-nacional ---------------
     await scContract.submitTransaction('EmitAsset', fhirResourceID, resourceType, cid, patientIDHash);
     console.log(`[${generica1.mspId}] EmitAsset OK (fhirResourceID=${fhirResourceID})`);
 

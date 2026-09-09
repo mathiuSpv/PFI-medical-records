@@ -23,6 +23,8 @@ Organizations:
         Rule: "OR('OrdererMSP.admin')"
     OrdererEndpoints:
       - orderer.example.com:7050
+      - orderer2.example.com:8050
+      - orderer3.example.com:10050
 
   - &ClinicaGenerica1
     Name: ClinicaGenerica1MSP
@@ -169,9 +171,13 @@ Channel: &ChannelDefaults
 #   orgs son miembros de aplicación de cada canal.
 ################################################################################
 Profiles:
-  # Canal público: metadatos de activos (fhir_resource_id, cid, hash de paciente)
-  # visibles para ambas clínicas. Nunca contiene payload clínico.
-  CanalUniversal:
+  # --- Nivel nacional -------------------------------------------------------
+  # Canal de intercambio interjurisdiccional: sólo circula por él lo que cruza
+  # un límite provincial (referencia on-chain del activo, consentimiento del
+  # paciente y registro de auditoría). Nunca contiene payload clínico, que
+  # permanece cifrado fuera de la cadena. Es un puente entre jurisdicciones y
+  # no un repositorio central.
+  CanalNacional:
     <<: *ChannelDefaults
     Orderer:
       <<: *OrdererDefaults
@@ -181,6 +187,37 @@ Profiles:
         - *ClinicaGenerica1
         - *ClinicaGenerica2
 
+  # --- Nivel jurisdiccional -------------------------------------------------
+  # Un canal por provincia, que agrupa a las instituciones radicadas en ella. El
+  # intercambio entre dos establecimientos de la misma jurisdicción se resuelve
+  # acá y no sale al nivel nacional: la competencia sanitaria en Argentina es
+  # provincial y el tráfico interno de una provincia no le incumbe a las demás.
+  #
+  # Las dos clínicas fundadoras están en jurisdicciones distintas a propósito,
+  # para que el escenario de referencia ejercite el intercambio
+  # interjurisdiccional, que es el que justifica el nivel nacional. Al dar de
+  # alta una clínica en una provincia ya existente, el canal de esa provincia
+  # pasa a tener más de un miembro y el intercambio intrajurisdiccional queda
+  # demostrable sin tocar el nivel nacional.
+  CanalCaba:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *ClinicaGenerica1
+
+  CanalBuenosAires:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *ClinicaGenerica2
+
+  # --- Bitácoras internas ---------------------------------------------------
   # Canal privado de la Clínica Genérica 1: único miembro de aplicación es
   # ella misma. Sirve como bitácora interna; el orderer se comparte con el
   # resto de los canales pero Genérica 2 no es miembro de este.

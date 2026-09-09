@@ -16,7 +16,12 @@ const path = require('node:path');
 const NETWORK_HOME = path.resolve(__dirname, '..', '..', 'network');
 const CLINICS_FILE = path.join(NETWORK_HOME, 'organizations', 'clinics.json');
 
-const CHANNEL_NAME = 'canal-universal';
+// Canal del nivel nacional. Sólo transporta lo que cruza un límite provincial;
+// el intercambio dentro de una jurisdicción se resuelve en el canal de esa
+// provincia (ver channelForOrgs).
+const NATIONAL_CHANNEL = 'canal-nacional';
+// Alias histórico: buena parte del BFF y de la UI lo importan con este nombre.
+const CHANNEL_NAME = NATIONAL_CHANNEL;
 const CHAINCODE_NAME = 'consent';
 
 let cache = { mtimeMs: 0, clinics: [] };
@@ -52,6 +57,8 @@ function toOrg(clinic) {
     peerHostAlias: `peer0.${clinic.domain}`,
     operationsPort: clinic.operationsPort,
     privateChannel: clinic.privateChannel,
+    jurisdiccion: clinic.jurisdiccion ?? null,
+    jurisdictionChannel: clinic.jurisdictionChannel ?? null,
     estado: clinic.estado,
     fundadora: clinic.fundadora === true,
   };
@@ -72,9 +79,68 @@ function getAllOrgs() {
   return Object.fromEntries(loadClinics().map((c) => [c.key, toOrg(c)]));
 }
 
-// getChannels() -> canal público + un canal privado por clínica activa.
+// getChannels() -> los tres niveles: el nacional, uno por jurisdicción con al
+// menos una clínica activa, y la bitácora privada de cada clínica.
 function getChannels() {
-  return [CHANNEL_NAME, ...Object.values(getOrgs()).map((o) => o.privateChannel)];
+  const orgs = Object.values(getOrgs());
+  const jurisdiccionales = [...new Set(orgs.map((o) => o.jurisdictionChannel).filter(Boolean))];
+  return [NATIONAL_CHANNEL, ...jurisdiccionales, ...orgs.map((o) => o.privateChannel)];
+}
+
+// jurisdictionChannels() -> { <jurisdicción>: { channel, orgs[] } }, derivado
+// del registro. Lo usa la UI para mostrar la topología por niveles.
+function jurisdictionChannels() {
+  const out = {};
+  for (const org of Object.values(getOrgs())) {
+    if (!org.jurisdiccion) continue;
+    out[org.jurisdiccion] ??= { channel: org.jurisdictionChannel, orgs: [] };
+    out[org.jurisdiccion].orgs.push(org.key);
+  }
+  return out;
+}
+
+// channelForOrgs(a, b) -> el canal por el que debe resolverse un intercambio
+// entre dos instituciones.
+//
+// Esta es la regla de ruteo de la topología jerárquica: si ambas pertenecen a
+// la misma jurisdicción, el intercambio se resuelve en el canal de esa
+// provincia y no sale de ella; si pertenecen a jurisdicciones distintas, cruza
+// un límite provincial y le corresponde el canal nacional. Una sola institución
+// (emisión, consulta propia) opera en su canal jurisdiccional.
+//
+// Que el nacional sea el caso por defecto y no el único es lo que distingue
+// esta topología de un bus plano: sin la regla, todo el tráfico interno de cada
+// provincia quedaría expuesto al resto del país sin necesidad.
+//
+// LIMITACIÓN ABIERTA, a resolver junto con el chaincode. El estado de Fabric es
+// por canal: un consentimiento otorgado en canal-caba no existe en
+// canal-nacional, y una transacción no puede abarcar dos canales. Por lo tanto
+// el activo, su consentimiento y la evaluación de acceso tienen que resolverse
+// TODOS en el mismo canal, y el emisor no sabe de antemano si quien va a pedir
+// el recurso estará en su jurisdicción o en otra.
+//
+// Las operaciones del BFF siguen por eso en el canal nacional, que es donde hoy
+// vive el índice completo de activos: usar esta función para rutear las
+// escrituras sin resolver antes la publicación entre niveles dejaría activos
+// invisibles para quien los pide desde otra provincia.
+//
+// La salida prevista es una operación de chaincode que publique la referencia
+// en el nivel nacional cuando se otorga un acceso interjurisdiccional, de modo
+// que el activo nazca en el canal de su provincia y ascienda sólo cuando cruza
+// un límite. Hasta entonces, esta función queda disponible y verificada para
+// que la decisión de ruteo esté escrita en un único lugar.
+function channelForOrgs(orgKeyA, orgKeyB) {
+  const orgs = getOrgs();
+  const a = orgs[orgKeyA];
+  if (!a) throw new Error(`Organización desconocida o dada de baja: ${orgKeyA}`);
+  if (!orgKeyB || orgKeyA === orgKeyB) return a.jurisdictionChannel ?? NATIONAL_CHANNEL;
+
+  const b = orgs[orgKeyB];
+  if (!b) throw new Error(`Organización desconocida o dada de baja: ${orgKeyB}`);
+  if (a.jurisdiccion && a.jurisdiccion === b.jurisdiccion) {
+    return a.jurisdictionChannel ?? NATIONAL_CHANNEL;
+  }
+  return NATIONAL_CHANNEL;
 }
 
 function orgKeyForMsp(mspId) {
@@ -111,9 +177,12 @@ module.exports = {
   getOrgs,
   getAllOrgs,
   getChannels,
+  jurisdictionChannels,
+  channelForOrgs,
   orgKeyForMsp,
   paths,
   CHANNEL_NAME,
+  NATIONAL_CHANNEL,
   CHAINCODE_NAME,
   IPFS_API_URL,
 };

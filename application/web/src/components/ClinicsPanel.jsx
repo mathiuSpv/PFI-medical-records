@@ -1,7 +1,7 @@
 // Alta y baja de instituciones del bus.
 //
 // No es un ABM contra una tabla: cada alta crea una organización Fabric real
-// (MSP y peer propios) y la incorpora a canal-universal con una actualización
+// (MSP y peer propios) y la incorpora a canal-nacional con una actualización
 // de configuración firmada por las clínicas que ya estaban; la baja hace el
 // camino inverso. Tarda ~30-40 s, así que el panel escucha el progreso por SSE
 // y lo va mostrando en vez de dejar un spinner mudo.

@@ -22,6 +22,12 @@ CLINIC_OPS_BASE=9446
 
 registryFile() { echo "${CLINICS_FILE}"; }
 
+# Cada clínica declara su jurisdicción además de su canal privado: el canal
+# jurisdiccional es el que resuelve el intercambio dentro de la provincia, y el
+# nacional queda para lo que cruza un límite provincial. Las dos fundadoras
+# están en jurisdicciones distintas para que el escenario de referencia
+# ejercite el intercambio interjurisdiccional.
+#
 # registryInit — crea el registro con las dos clínicas fundadoras si no existe.
 # Idempotente: si ya está, no lo pisa (conserva las altas hechas después).
 registryInit() {
@@ -41,6 +47,9 @@ registryInit() {
       "chaincodePort": 7052,
       "operationsPort": 9444,
       "privateChannel": "canal-generica-1",
+      "jurisdiccion": "caba",
+      "jurisdictionChannel": "canal-caba",
+      "jurisdictionProfile": "CanalCaba",
       "profile": "CanalGenerica1",
       "configtxDir": "",
       "composeFile": "",
@@ -56,6 +65,9 @@ registryInit() {
       "chaincodePort": 9052,
       "operationsPort": 9445,
       "privateChannel": "canal-generica-2",
+      "jurisdiccion": "buenos-aires",
+      "jurisdictionChannel": "canal-buenos-aires",
+      "jurisdictionProfile": "CanalBuenosAires",
       "profile": "CanalGenerica2",
       "configtxDir": "",
       "composeFile": "",
@@ -136,16 +148,32 @@ nextPorts() {
   echo "${peer} ${cc} ${ops}"
 }
 
-# registryAdd <key> <nombre> <mspId> <domain> <peerPort> <ccPort> <opsPort> <canalPrivado> <perfil> <configtxDir> <composeFile>
+# registryAdd <key> <nombre> <mspId> <domain> <peerPort> <ccPort> <opsPort> <canalPrivado> <perfil> <configtxDir> <composeFile> [jurisdiccion]
+#
+# La jurisdicción determina en qué canal provincial opera la clínica. Si se
+# omite queda en null y la clínica sólo participa del canal nacional: es un
+# estado válido pero degradado, porque su tráfico interno no tiene dónde
+# quedarse. jurisdictionChannel y jurisdictionProfile se derivan de la clave de
+# la jurisdicción para que no haya dos fuentes de verdad.
 registryAdd() {
   local tmp="${CLINICS_FILE}.tmp"
+  local jur="${12:-}" jurChannel="" jurProfile=""
+  if [ -n "$jur" ]; then
+    jurChannel="canal-${jur}"
+    # CanalBuenosAires a partir de buenos-aires: cada segmento capitalizado.
+    jurProfile="Canal$(echo "$jur" | awk -F- '{for(i=1;i<=NF;i++) printf toupper(substr($i,1,1)) substr($i,2)}')"
+  fi
   jq --arg key "$1" --arg nombre "$2" --arg mspId "$3" --arg domain "$4" \
      --argjson peerPort "$5" --argjson chaincodePort "$6" --argjson operationsPort "$7" \
      --arg privateChannel "$8" --arg profile "$9" --arg configtxDir "${10}" --arg composeFile "${11}" \
+     --arg jurisdiccion "$jur" --arg jurChannel "$jurChannel" --arg jurProfile "$jurProfile" \
      '.clinics += [{
         key: $key, nombre: $nombre, mspId: $mspId, domain: $domain,
         peerPort: $peerPort, chaincodePort: $chaincodePort, operationsPort: $operationsPort,
         privateChannel: $privateChannel, profile: $profile,
+        jurisdiccion: (if $jurisdiccion == "" then null else $jurisdiccion end),
+        jurisdictionChannel: (if $jurChannel == "" then null else $jurChannel end),
+        jurisdictionProfile: (if $jurProfile == "" then null else $jurProfile end),
         configtxDir: $configtxDir, composeFile: $composeFile,
         estado: "activa", fundadora: false
       }]' "${CLINICS_FILE}" > "${tmp}" && mv "${tmp}" "${CLINICS_FILE}"
@@ -167,4 +195,28 @@ composeFilesActivos() {
 
 composeFilesTodos() {
   jq -r '.clinics[] | select(.fundadora == false) | .composeFile' "${CLINICS_FILE}"
+}
+
+# jurisdictions — una línea por jurisdicción presente entre las clínicas
+# activas: "<clave> <canal> <perfil>". Se deriva del registro y no de una lista
+# fija, de modo que dar de alta una clínica en una provincia nueva agrega su
+# canal sin tocar este script.
+jurisdictions() {
+  jq -r '[.clinics[] | select(.estado == "activa") | select(.jurisdiccion != null)]
+         | group_by(.jurisdiccion)[]
+         | "\(.[0].jurisdiccion) \(.[0].jurisdictionChannel) \(.[0].jurisdictionProfile)"' \
+    "${CLINICS_FILE}"
+}
+
+# clinicsInJurisdiction <clave> — claves de las clínicas activas de esa
+# jurisdicción, separadas por espacios (miembros del canal provincial).
+clinicsInJurisdiction() {
+  jq -r --arg j "$1" \
+    '[.clinics[] | select(.estado == "activa") | select(.jurisdiccion == $j) | .key] | join(" ")' \
+    "${CLINICS_FILE}"
+}
+
+# jurisdictionOf <claveClinica> — jurisdicción de una clínica.
+jurisdictionOf() {
+  jq -r --arg k "$1" '.clinics[] | select(.key == $k) | .jurisdiccion // empty' "${CLINICS_FILE}"
 }
