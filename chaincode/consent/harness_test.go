@@ -41,33 +41,66 @@ type harness struct {
 	now     time.Time
 	txID    string
 	eventos map[string][]byte
+	// historial replica lo que el peer guarda por clave: cada PutState agrega
+	// una versión. Las queries de historial (GetClinicHistory,
+	// GetConsentHistory) leen de acá, no del world state, igual que en la red.
+	historial map[string][]*queryresult.KeyModification
+	// fallas inyectadas: prefijo de clave -> error a devolver. Permiten
+	// ejercitar las ramas de error de infraestructura, que son la mayor parte
+	// del código no cubierto y las que sostienen una garantía del Proyecto: si
+	// el world state falla, la operación tiene que abortar, nunca continuar a
+	// medias y dejar un registro inconsistente.
+	fallaGet   map[string]error
+	fallaPut   map[string]error
+	fallaRango error
+	fallaEvent error
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 
 	h := &harness{
-		t:       t,
-		sc:      &consent.SmartContract{},
-		state:   map[string][]byte{},
-		ident:   &mocks.ClientIdentity{MspID: orgA},
-		now:     time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC),
-		txID:    "tx-0",
-		eventos: map[string][]byte{},
+		t:         t,
+		sc:        &consent.SmartContract{},
+		state:     map[string][]byte{},
+		ident:     &mocks.ClientIdentity{MspID: orgA},
+		now:       time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC),
+		txID:      "tx-0",
+		eventos:   map[string][]byte{},
+		historial: map[string][]*queryresult.KeyModification{},
+		fallaGet:  map[string]error{},
+		fallaPut:  map[string]error{},
 	}
 
 	stub := &mocks.ChaincodeStub{}
-	stub.GetStateCalls(func(key string) ([]byte, error) { return h.state[key], nil })
+	stub.GetStateCalls(func(key string) ([]byte, error) {
+		if err := h.falla(h.fallaGet, key); err != nil {
+			return nil, err
+		}
+		return h.state[key], nil
+	})
 	stub.PutStateCalls(func(key string, value []byte) error {
+		if err := h.falla(h.fallaPut, key); err != nil {
+			return err
+		}
 		h.state[key] = append([]byte(nil), value...)
+		h.historial[key] = append(h.historial[key], &queryresult.KeyModification{
+			TxId:      h.txID,
+			Value:     append([]byte(nil), value...),
+			Timestamp: timestamppb.New(h.now),
+		})
 		return nil
 	})
 	stub.GetStateByRangeCalls(h.rango)
+	stub.GetHistoryForKeyCalls(h.historia)
 	stub.GetTxIDCalls(func() string { return h.txID })
 	stub.GetTxTimestampCalls(func() (*timestamppb.Timestamp, error) {
 		return timestamppb.New(h.now), nil
 	})
 	stub.SetEventCalls(func(name string, payload []byte) error {
+		if h.fallaEvent != nil {
+			return h.fallaEvent
+		}
 		h.eventos[name] = append([]byte(nil), payload...)
 		return nil
 	})
@@ -82,6 +115,9 @@ func newHarness(t *testing.T) *harness {
 // ordenadas, como hace el peer: getAllByPrefix depende de eso para que la
 // salida del chaincode sea determinista.
 func (h *harness) rango(start, end string) (shim.StateQueryIteratorInterface, error) {
+	if h.fallaRango != nil {
+		return nil, h.fallaRango
+	}
 	var claves []string
 	for k := range h.state {
 		if k >= start && k < end {
@@ -100,6 +136,78 @@ func (h *harness) rango(start, end string) (shim.StateQueryIteratorInterface, er
 	})
 	it.CloseCalls(func() error { return nil })
 	return it, nil
+}
+
+// falla devuelve el error inyectado para una clave, si alguno coincide por
+// prefijo.
+func (h *harness) falla(tabla map[string]error, key string) error {
+	for prefijo, err := range tabla {
+		if strings.HasPrefix(key, prefijo) {
+			return err
+		}
+	}
+	return nil
+}
+
+// romperLectura / romperEscritura inyectan un fallo de world state para las
+// claves con ese prefijo. Con prefijo vacío fallan todas.
+func (h *harness) romperLectura(prefijo string, err error) *harness {
+	h.fallaGet[prefijo] = err
+	return h
+}
+
+func (h *harness) romperEscritura(prefijo string, err error) *harness {
+	h.fallaPut[prefijo] = err
+	return h
+}
+
+func (h *harness) romperRecorrido(err error) *harness { h.fallaRango = err; return h }
+func (h *harness) romperEventos(err error) *harness   { h.fallaEvent = err; return h }
+
+// corromper reemplaza por JSON inválido el valor de las claves con ese prefijo,
+// para ejercitar las ramas de deserialización.
+func (h *harness) corromper(prefijo string) *harness {
+	for k := range h.state {
+		if strings.HasPrefix(k, prefijo) {
+			h.state[k] = []byte("{no es json")
+		}
+	}
+	return h
+}
+
+// historia implementa GetHistoryForKey sobre las versiones acumuladas por
+// PutState. Una clave sin escrituras devuelve un iterador vacío, que es lo que
+// hace el peer: no es un error, es un historial de longitud cero.
+func (h *harness) historia(key string) (shim.HistoryQueryIteratorInterface, error) {
+	mods := h.historial[key]
+	i := 0
+	return &historyIterator{
+		hasNext: func() bool { return i < len(mods) },
+		next: func() (*queryresult.KeyModification, error) {
+			m := mods[i]
+			i++
+			return m, nil
+		},
+	}, nil
+}
+
+// historyIterator es un fake a mano y no un mock generado: la interfaz tiene
+// tres métodos y escribirla acá evita regenerar counterfeiter para el único
+// iterador que faltaba.
+type historyIterator struct {
+	hasNext func() bool
+	next    func() (*queryresult.KeyModification, error)
+}
+
+func (it *historyIterator) HasNext() bool                               { return it.hasNext() }
+func (it *historyIterator) Next() (*queryresult.KeyModification, error) { return it.next() }
+func (it *historyIterator) Close() error                                { return nil }
+
+// borrarEstado simula un DelState para poder ejercitar las ramas de lectura
+// sobre una clave inexistente sin tener que construir un harness aparte.
+func (h *harness) borrarEstado(key string) *harness {
+	delete(h.state, key)
+	return h
 }
 
 // as cambia quién firma la transacción. Es el eje de casi todos los tests: en
