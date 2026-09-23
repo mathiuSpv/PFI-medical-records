@@ -74,6 +74,12 @@ module.exports = function buildRoutes(broadcast) {
 
   // Verificación de identidad simulada (RENAPER mock): informativa, no
   // condiciona ninguna transacción del chaincode.
+  // Verificación de integridad bajo demanda: descarga el contenido del activo,
+  // recalcula su CID y lo contrasta con el anclado en la cadena. Sirve para
+  // ejercitar la propiedad sin tener que pasar por una entrega de clave.
+  router.post('/assets/:id/verify-integrity', wrap((req) =>
+    keys.verifyAssetIntegrity(req.params.id, orgOrDefault(req))));
+
   // Topología de canales por nivel: el tablero la usa para mostrar la
   // estructura federal de la red en lugar de una lista plana de canales.
   router.get('/topology', wrap(() => ({
