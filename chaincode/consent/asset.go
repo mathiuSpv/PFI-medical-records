@@ -17,8 +17,13 @@ type Asset struct {
 	OwnerOrg       string `json:"OwnerOrg"`
 	PatientIDHash  string `json:"PatientIDHash"`
 	ResourceType   string `json:"ResourceType"`
-	Timestamp      string `json:"Timestamp"`
-	TxID           string `json:"TxID"`
+	// OriginChannel es el canal donde nació el activo (su provincia). En un
+	// activo nativo coincide con el canal donde está guardado; en una
+	// referencia ascendida al canal nacional conserva el canal provincial de
+	// origen. Vacío en registros anteriores a esta versión (retrocompatible).
+	OriginChannel string `json:"OriginChannel"`
+	Timestamp     string `json:"Timestamp"`
+	TxID          string `json:"TxID"`
 }
 
 const assetKeyPrefix = "ASSET_"
@@ -63,6 +68,7 @@ func (s *SmartContract) EmitAsset(ctx contractapi.TransactionContextInterface, f
 		IpfsCid:        ipfsCid,
 		PatientIDHash:  patientIDHash,
 		OwnerOrg:       ownerOrg,
+		OriginChannel:  ctx.GetStub().GetChannelID(),
 		Timestamp:      txTimestamp.AsTime().UTC().Format(time.RFC3339),
 		TxID:           ctx.GetStub().GetTxID(),
 	}
@@ -108,4 +114,55 @@ func (s *SmartContract) GetAsset(ctx contractapi.TransactionContextInterface, fh
 // GetAllAssets devuelve todos los activos emitidos. Query de solo lectura.
 func (s *SmartContract) GetAllAssets(ctx contractapi.TransactionContextInterface) ([]*Asset, error) {
 	return getAllByPrefix[Asset](ctx, assetKeyPrefix)
+}
+
+// PublishAssetRef publica en el canal nacional la REFERENCIA de un activo que
+// nació en un canal provincial, para que ascienda cuando cruza una frontera
+// jurisdiccional (un consentimiento interjurisdiccional). No duplica el
+// contenido clínico —sigue en IPFS—: solo los metadatos que CheckAccess y el
+// envoltorio de clave necesitan. Como una transacción no puede abarcar dos
+// canales, esto lo invoca el BFF como segunda transacción sobre el canal
+// nacional tras otorgar el acceso (ver application/server/actions.js).
+func (s *SmartContract) PublishAssetRef(ctx contractapi.TransactionContextInterface, fhirResourceID string, resourceType string, ipfsCid string, patientIDHash string, originChannel string) error {
+	if fhirResourceID == "" || resourceType == "" || ipfsCid == "" || patientIDHash == "" || originChannel == "" {
+		return fmt.Errorf("fhirResourceID, resourceType, ipfsCid, patientIDHash y originChannel son obligatorios")
+	}
+
+	// El dueño sale del firmante, nunca de un argumento: nadie puede publicar
+	// una referencia atribuyéndosela a otra organización.
+	ownerOrg, err := requireActiveCaller(ctx)
+	if err != nil {
+		return err
+	}
+
+	existing, err := readAsset(ctx, fhirResourceID)
+	if err != nil {
+		return err
+	}
+	// Nunca pisar un activo nativo de este canal con una referencia.
+	if existing != nil && existing.OriginChannel == ctx.GetStub().GetChannelID() {
+		return fmt.Errorf("ya existe un activo nativo %s en este canal", fhirResourceID)
+	}
+
+	txTimestamp, err := ctx.GetStub().GetTxTimestamp()
+	if err != nil {
+		return fmt.Errorf("no se pudo obtener el timestamp de la transacción: %v", err)
+	}
+
+	asset := Asset{
+		FhirResourceID: fhirResourceID,
+		ResourceType:   resourceType,
+		IpfsCid:        ipfsCid,
+		PatientIDHash:  patientIDHash,
+		OwnerOrg:       ownerOrg,
+		OriginChannel:  originChannel,
+		Timestamp:      txTimestamp.AsTime().UTC().Format(time.RFC3339),
+		TxID:           ctx.GetStub().GetTxID(),
+	}
+
+	assetJSON, err := json.Marshal(asset)
+	if err != nil {
+		return err
+	}
+	return ctx.GetStub().PutState(assetKey(fhirResourceID), assetJSON)
 }
