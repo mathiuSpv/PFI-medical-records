@@ -11,7 +11,8 @@
 const { common } = require('@hyperledger/fabric-protos');
 
 const { getConn } = require('./connections');
-const { CHANNEL_NAME } = require('../src/config');
+const { channelReaders } = require('./readmodel');
+const { NATIONAL_CHANNEL, getChannels } = require('../src/config');
 
 // El TxID de Fabric es un SHA-256 en hexadecimal. Se valida antes de consultar
 // para fallar con un mensaje claro en vez de con un error de gRPC, y para no
@@ -26,15 +27,25 @@ const aHex = (valor) => {
   return bytes.toString('hex');
 };
 
-// blockByTxId devuelve la cabecera del bloque que contiene la transacción.
-async function blockByTxId(orgKey, txId) {
+// blockByTxId devuelve la cabecera del bloque que contiene la transacción. El
+// acceso puede haber quedado en un canal provincial (same-jur) o en el nacional
+// (cross-jur), así que el canal viene del access-log (_channel). Leer un bloque
+// exige un peer miembro del canal: si quien pregunta no lo es, se usa un lector
+// miembro (readmodel.channelReaders).
+async function blockByTxId(orgKey, txId, channel = NATIONAL_CHANNEL) {
   if (!TXID_RE.test(String(txId ?? ''))) {
     throw new Error('TxID inválido: se espera un hexadecimal de 64 caracteres');
   }
+  const canal = channel || NATIONAL_CHANNEL;
+  if (!getChannels().includes(canal)) {
+    throw new Error(`Canal desconocido: ${canal}`);
+  }
 
-  const { gateway } = await getConn(orgKey);
-  const qscc = gateway.getNetwork(CHANNEL_NAME).getContract('qscc');
-  const bytes = await qscc.evaluateTransaction('GetBlockByTxID', CHANNEL_NAME, txId);
+  const reader = channelReaders().find((r) => r.channel === canal);
+  const readerOrg = reader ? reader.orgKey : orgKey;
+  const { gateway } = await getConn(readerOrg, canal);
+  const qscc = gateway.getNetwork(canal).getContract('qscc');
+  const bytes = await qscc.evaluateTransaction('GetBlockByTxID', canal, txId);
   const bloque = common.Block.deserializeBinary(bytes);
 
   const header = bloque.getHeader();
@@ -42,7 +53,7 @@ async function blockByTxId(orgKey, txId) {
 
   return {
     txId,
-    canal: CHANNEL_NAME,
+    canal,
     // getNumber() puede venir como número o como string: el campo es un uint64
     // y jspb lo devuelve string cuando no entra en un number seguro.
     numero: String(header.getNumber()),

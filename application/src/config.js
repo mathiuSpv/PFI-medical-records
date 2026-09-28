@@ -81,6 +81,19 @@ function getAllOrgs() {
 
 // getChannels() -> los tres niveles: el nacional, uno por jurisdicción con al
 // menos una clínica activa, y la bitácora privada de cada clínica.
+// Convención de nombres de canal (tres clases, no colisionan):
+//   - Nacional:    canal-nacional (único).
+//   - Provincial:  canal-<jurisdiccion>  (p.ej. canal-caba, canal-buenos-aires).
+//   - Privado:     la bitácora interna de cada institución.
+// Dos esquemas históricos para el privado: las fundadoras usan
+// canal-generica-1 / canal-generica-2 (con número y guion, definidos a mano en
+// network.sh/configtx), y las clínicas dadas de alta en caliente usan
+// canal-<key> sin número (derivado en addOrg.sh). La diferencia es cosmética —
+// nunca colisionan porque <key> es único y las fundadoras son fijas— y es a lo
+// que apunta la devolución del 50% ("no coinciden los números de canales"):
+// unificar el esquema de las fundadoras a canal-<key> implica recrear sus
+// canales en el orderer, así que queda para la tarea de topología dinámica, no
+// acá.
 function getChannels() {
   const orgs = Object.values(getOrgs());
   const jurisdiccionales = [...new Set(orgs.map((o) => o.jurisdictionChannel).filter(Boolean))];
@@ -112,23 +125,15 @@ function jurisdictionChannels() {
 // esta topología de un bus plano: sin la regla, todo el tráfico interno de cada
 // provincia quedaría expuesto al resto del país sin necesidad.
 //
-// LIMITACIÓN ABIERTA, a resolver junto con el chaincode. El estado de Fabric es
-// por canal: un consentimiento otorgado en canal-caba no existe en
-// canal-nacional, y una transacción no puede abarcar dos canales. Por lo tanto
-// el activo, su consentimiento y la evaluación de acceso tienen que resolverse
-// TODOS en el mismo canal, y el emisor no sabe de antemano si quien va a pedir
-// el recurso estará en su jurisdicción o en otra.
-//
-// Las operaciones del BFF siguen por eso en el canal nacional, que es donde hoy
-// vive el índice completo de activos: usar esta función para rutear las
-// escrituras sin resolver antes la publicación entre niveles dejaría activos
-// invisibles para quien los pide desde otra provincia.
-//
-// La salida prevista es una operación de chaincode que publique la referencia
-// en el nivel nacional cuando se otorga un acceso interjurisdiccional, de modo
-// que el activo nazca en el canal de su provincia y ascienda sólo cuando cruza
-// un límite. Hasta entonces, esta función queda disponible y verificada para
-// que la decisión de ruteo esté escrita en un único lugar.
+// El estado de Fabric es por canal: un consentimiento otorgado en canal-caba no
+// existe en canal-nacional, y una transacción no puede abarcar dos canales. Por
+// eso el ascenso entre niveles no lo hace el chaincode (no hay cross-channel
+// invoke) sino el BFF como una segunda transacción: el activo nace en el canal
+// de su provincia (actions.emitAsset → este canal) y su REFERENCIA se publica
+// en el nacional cuando un consentimiento cruza una frontera
+// (actions.grantConsent → PublishAssetRef). Las lecturas unen nacional +
+// provinciales y de-duplican (server/readmodel.js). Esta función es la única
+// fuente de la decisión de ruteo y está cubierta por topology.test.js.
 function channelForOrgs(orgKeyA, orgKeyB) {
   const orgs = getOrgs();
   const a = orgs[orgKeyA];

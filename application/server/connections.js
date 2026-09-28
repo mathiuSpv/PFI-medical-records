@@ -26,12 +26,19 @@ async function getConn(orgKey, channel = NATIONAL_CHANNEL) {
   }
   const key = connKey(orgKey, channel);
   if (!connections.has(key)) {
-    connections.set(key, (async () => {
+    const pending = (async () => {
       const { gateway, client, mspId } = await newGatewayForOrg(orgKey);
       const network = gateway.getNetwork(channel);
       const contract = network.getContract(CHAINCODE_NAME);
       return { gateway, client, mspId, network, contract, channel };
-    })());
+    })();
+    connections.set(key, pending);
+    // No cachear una conexión fallida: si el intento rechaza (p.ej. la red aún
+    // no está arriba al boot), se desaloja para que un reintento reconecte.
+    // Sólo borra si sigue siendo ESTA promesa (no pisa un reconnect posterior).
+    pending.catch(() => {
+      if (connections.get(key) === pending) connections.delete(key);
+    });
   }
   return connections.get(key);
 }
@@ -63,6 +70,16 @@ async function evaluateJSON(orgKey, fn, ...args) {
   return JSON.parse(utf8(await contract.evaluateTransaction(fn, ...args)));
 }
 
+// evaluateJSONOn: como evaluateJSON pero sobre un canal explícito. Lo usa la
+// agregación del read-model (readmodel.js) y las lecturas que ahora dependen
+// del canal donde vive el activo o la tx (keys.js, blocks.js), ya que con la
+// topología jerárquica un activo puede estar en su canal provincial y no en el
+// nacional.
+async function evaluateJSONOn(orgKey, channel, fn, ...args) {
+  const { contract } = await getConn(orgKey, channel);
+  return JSON.parse(utf8(await contract.evaluateTransaction(fn, ...args)));
+}
+
 // defaultOrgKey — primera clínica activa. Se usa para las lecturas que no
 // dependen de quién pregunta y para el listener de eventos.
 function defaultOrgKey() {
@@ -71,4 +88,4 @@ function defaultOrgKey() {
   return keys[0];
 }
 
-module.exports = { utf8, getConn, dropConn, evaluateJSON, defaultOrgKey };
+module.exports = { utf8, getConn, dropConn, evaluateJSON, evaluateJSONOn, defaultOrgKey };

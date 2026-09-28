@@ -1,21 +1,27 @@
-// Suscripción a los eventos de chaincode del canal público, y el puente entre
-// esos eventos y las dos cosas que el dashboard necesita: el feed en vivo y la
-// entrega automática de clave ante cada PERMIT.
+// Suscripción a los eventos de chaincode y el puente entre esos eventos y las
+// dos cosas que el dashboard necesita: el feed en vivo y la entrega automática
+// de clave ante cada PERMIT.
 //
-// Una sola suscripción alcanza: canal-nacional es público a todas las
-// clínicas, así que cualquiera de ellas ve todos los eventos.
+// Con la topología jerárquica una suscripción al nacional NO alcanza: un acceso
+// entre dos clínicas de la misma provincia se resuelve en su canal provincial y
+// su evento AccessPermitted sólo se ve ahí. Por eso se escucha el nacional y
+// cada canal provincial. Como cada transacción vive en un solo canal, no hay
+// doble entrega. Los eventos de clínica (RegisterClinic corre en TODOS los
+// canales al desplegar) se manejan sólo en el nacional para no duplicarlos.
 'use strict';
 
 const { listenForEvents } = require('../src/events');
-const { getConn, dropConn, defaultOrgKey } = require('./connections');
+const { getConn } = require('./connections');
+const { channelReaders } = require('./readmodel');
+const { NATIONAL_CHANNEL } = require('../src/config');
 const { deliverKeyFor } = require('./keys');
-const { CHANNEL_NAME } = require('../src/config');
 
-function manejarEvento(broadcast) {
+function manejarEvento(broadcast, channel) {
   return (event, payload) => {
-    // Alta y baja de instituciones: la UI las usa para refrescar la topología
-    // sin hacer polling.
+    // Alta y baja de instituciones: sólo en el nacional (el evento se emite en
+    // cada canal donde corre RegisterClinic; se maneja una vez para no duplicar).
     if (event.eventName === 'ClinicRegistered' || event.eventName === 'ClinicDeactivated') {
+      if (channel !== NATIONAL_CHANNEL) return;
       broadcast({
         type: 'clinic-event',
         eventName: event.eventName,
@@ -40,6 +46,7 @@ function manejarEvento(broadcast) {
       resourceType: payload.ResourceType,
       patientIDHash: payload.PatientIDHash,
       timestamp: payload.Timestamp,
+      channel,
     });
 
     // Si tenemos la clave de ese recurso y quien pide no es la org dueña, se
@@ -49,25 +56,30 @@ function manejarEvento(broadcast) {
   };
 }
 
-// startEventListener reintenta: al boot del server la red puede no estar
-// levantada todavía.
-async function startEventListener(broadcast) {
+// listenOnChannel suscribe un canal con reintentos: al boot del server la red
+// puede no estar levantada todavía. La caché de conexiones desaloja sola un
+// intento fallido, así que basta reintentar getConn.
+async function listenOnChannel(broadcast, { channel, orgKey }) {
   const maxAttempts = 30;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    let orgKey;
     try {
-      orgKey = defaultOrgKey();
-      const { network } = await getConn(orgKey);
-      await listenForEvents(network, manejarEvento(broadcast));
-      console.log(`[fabric] Listener de eventos activo en '${CHANNEL_NAME}' (como ${orgKey})`);
+      const { network } = await getConn(orgKey, channel);
+      await listenForEvents(network, manejarEvento(broadcast, channel));
+      console.log(`[fabric] Listener de eventos activo en '${channel}' (como ${orgKey})`);
       return;
     } catch (err) {
-      console.warn(`[fabric] Listener no pudo arrancar (intento ${attempt}/${maxAttempts}): ${err.message}`);
-      if (orgKey) await dropConn(orgKey);
+      console.warn(`[fabric] Listener '${channel}' no arrancó (intento ${attempt}/${maxAttempts}): ${err.message}`);
       await new Promise((r) => setTimeout(r, 5000));
     }
   }
-  console.error('[fabric] El listener de eventos no pudo arrancar; ¿está la red levantada? Reiniciar el server tras levantar la red.');
+  console.error(`[fabric] El listener de '${channel}' no pudo arrancar; ¿está la red levantada?`);
+}
+
+// startEventListener suscribe el nacional y cada canal provincial, cada uno con
+// su propio org miembro (channelReaders), en paralelo.
+async function startEventListener(broadcast) {
+  const readers = channelReaders();
+  await Promise.all(readers.map((r) => listenOnChannel(broadcast, r)));
 }
 
 module.exports = { startEventListener };
