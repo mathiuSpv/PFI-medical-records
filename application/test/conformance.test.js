@@ -78,6 +78,33 @@ const CONFORMES = [
     code: { coding: [{ system: 'http://loinc.org', code: '8867-4' }] },
     subject: { reference: 'Patient/p1' },
   }],
+  ['Observation con component y valueQuantity válidos', 'Observation', {
+    resourceType: 'Observation',
+    status: 'final',
+    code: { coding: [{ system: 'http://loinc.org', code: '85354-9' }] },
+    subject: { reference: 'Patient/paciente-001' },
+    effectiveDateTime: '2026-07-15T09:30:00Z',
+    component: [{ code: { text: 'sistólica' }, valueQuantity: { value: 118, unit: 'mmHg' } }],
+  }],
+  ['Observation con fecha sólo-año (dateTime parcial válido)', 'Observation', {
+    resourceType: 'Observation',
+    status: 'final',
+    code: { coding: [{ system: 'http://loinc.org', code: '8867-4' }] },
+    subject: { reference: 'Patient/p1' },
+    effectiveDateTime: '2026',
+  }],
+  ['Patient con name y gender válidos', 'Patient', {
+    resourceType: 'Patient',
+    name: [{ family: 'Pérez', given: ['Ana'] }],
+    gender: 'female',
+    birthDate: '1990-05-20',
+  }],
+  ['Encounter válido', 'Encounter', {
+    resourceType: 'Encounter',
+    status: 'finished',
+    class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: 'AMB' },
+    subject: { reference: 'Patient/p1' },
+  }],
 ];
 
 // Clona y aplica una mutación, para que cada caso parta de un recurso válido.
@@ -121,6 +148,21 @@ const NO_CONFORMES = [
   ['criticality fuera del ValueSet', 'AllergyIntolerance', mutar(alergiaValida, { criticality: 'altisima' }), 'codigo-fuera-del-valueset'],
   ['type de alergia fuera del ValueSet', 'AllergyIntolerance', mutar(alergiaValida, { type: 'reaccion' }), 'codigo-fuera-del-valueset'],
   ['clinicalStatus de alergia desde otro sistema', 'AllergyIntolerance', mutar(alergiaValida, { clinicalStatus: { coding: [{ system: 'http://ejemplo.local/estados', code: 'active' }] } }), 'sistema-terminologico-inesperado'],
+
+  // Valor del miembro [x] (antes no se type-chequeaba el valor clínico)
+  ['valueQuantity con value no numérico', 'Observation', mutar(observacionValida, { valueQuantity: { value: 'ciento dieciocho', unit: 'mmHg' } }), 'miembro-tipo-invalido'],
+  ['effectiveDateTime mal formado', 'Observation', mutar(observacionValida, { effectiveDateTime: '15 de julio' }), 'miembro-tipo-invalido'],
+  // Contenido de arrays (antes sólo se verificaba "es un array")
+  ['result con elemento que no es Reference', 'DiagnosticReport', mutar(diagnosticoValido, { result: ['Observation/obs-001'] }), 'elemento-de-array-invalido'],
+  ['component con elemento primitivo', 'Observation', mutar(observacionValida, { component: ['solo texto'] }), 'elemento-de-array-invalido'],
+  // Reference literal mal armada (sin "Tipo/id")
+  ['subject con reference mal armada', 'Observation', mutar(observacionValida, { subject: { reference: 'sin barra' } }), 'tipo-invalido'],
+
+  // Nuevos tipos: Patient y Encounter
+  ['Patient sin name', 'Patient', { resourceType: 'Patient', gender: 'female' }, 'elemento-obligatorio-ausente'],
+  ['gender fuera del ValueSet', 'Patient', { resourceType: 'Patient', name: [{ family: 'X' }], gender: 'masculino' }, 'codigo-fuera-del-valueset'],
+  ['Encounter status fuera del ValueSet', 'Encounter', { resourceType: 'Encounter', status: 'terminado', class: { code: 'AMB' }, subject: { reference: 'Patient/p1' } }, 'codigo-fuera-del-valueset'],
+  ['Encounter sin subject', 'Encounter', { resourceType: 'Encounter', status: 'finished', class: { code: 'AMB' } }, 'elemento-obligatorio-ausente'],
 ];
 
 // --- Pruebas ----------------------------------------------------------------

@@ -39,35 +39,53 @@ function issue(severity, code, path, message) {
   return { severity, code, path, message };
 }
 
+// dateTime de FHIR R4 (regex del estándar): año obligatorio, y mes/día/hora
+// opcionales pero bien formados. Date.parse aceptaba "2026" o "July 15"; esto
+// no. Cubre también 'date'/'instant' (subconjuntos de esta forma).
+const FHIR_DATETIME = /^([0-9]([0-9]([0-9][1-9]|[1-9]0)|[1-9]00)|[1-9]000)(-(0[1-9]|1[0-2])(-(0[0-9]|[1-2][0-9]|3[0-1])(T([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\.[0-9]+)?(Z|[+-]((0[0-9]|1[0-3]):[0-5][0-9]|14:00)))?)?)?$/;
+
+// Referencia literal "Tipo/id": el tipo es un nombre de recurso y el id un
+// token acotado del estándar. Descarta un reference mal armado (sin barra, con
+// espacios) que la forma "es-string" dejaba pasar.
+const FHIR_REFERENCE = /^[A-Za-z]+\/[A-Za-z0-9.-]{1,64}$/;
+
 // --- Comprobación de tipos ---
-// Sólo distingue lo que los perfiles necesitan. CodeableConcept y Reference se
-// validan por forma (tienen coding/text, tiene reference/identifier) y no por
-// esquema completo: alcanza para detectar el error que importa, que es mandar
-// un string pelado donde el estándar pide una estructura codificada.
+// Distingue lo que los perfiles (y los miembros [x]) necesitan. CodeableConcept
+// y Reference se validan por forma + contenido mínimo: alcanza para detectar el
+// error que importa, un string pelado o una referencia mal armada donde el
+// estándar pide estructura.
 function typeMatches(type, value) {
+  const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
   switch (type) {
     case 'string':
       return typeof value === 'string';
     case 'number':
       return typeof value === 'number';
+    case 'integer':
+      return typeof value === 'number' && Number.isInteger(value);
     case 'boolean':
       return typeof value === 'boolean';
     case 'array':
       return Array.isArray(value);
     case 'object':
-      return value !== null && typeof value === 'object' && !Array.isArray(value);
+      return isObject;
     case 'dateTime':
-      return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+      return typeof value === 'string' && FHIR_DATETIME.test(value);
+    case 'Quantity':
+      // Lo que lo distingue de un objeto cualquiera: un value numérico.
+      return isObject && typeof value.value === 'number';
+    case 'Period':
+      // start/end son dateTime si están; al menos uno debe estar.
+      return isObject
+        && (value.start !== undefined || value.end !== undefined)
+        && (value.start === undefined || (typeof value.start === 'string' && FHIR_DATETIME.test(value.start)))
+        && (value.end === undefined || (typeof value.end === 'string' && FHIR_DATETIME.test(value.end)));
     case 'CodeableConcept':
-      return (
-        value !== null && typeof value === 'object' && !Array.isArray(value)
-        && (Array.isArray(value.coding) || typeof value.text === 'string')
-      );
+      return isObject && (Array.isArray(value.coding) || typeof value.text === 'string');
     case 'Reference':
-      return (
-        value !== null && typeof value === 'object' && !Array.isArray(value)
-        && (typeof value.reference === 'string' || typeof value.identifier === 'object')
-      );
+      return isObject
+        && ((typeof value.reference === 'string' && FHIR_REFERENCE.test(value.reference))
+          || (value.identifier !== null && typeof value.identifier === 'object'));
     default:
       return true;
   }
@@ -144,6 +162,17 @@ function checkElement(path, spec, value, issues) {
       issues.push(issue(ERROR, 'cardinalidad-insuficiente', path,
         `${value.length} repeticiones para una cardinalidad mínima de ${spec.min}`));
     }
+    // Contenido del array: cada repetición debe ser del tipo que el perfil
+    // declara en `element` (p.ej. Reference, object). Antes sólo se verificaba
+    // "es un array" y adentro podía venir cualquier cosa.
+    if (spec.element) {
+      value.forEach((item, i) => {
+        if (!typeMatches(spec.element, item)) {
+          issues.push(issue(ERROR, 'elemento-de-array-invalido', `${path}[${i}]`,
+            `cada repetición debe ser ${spec.element} y se recibió ${Array.isArray(item) ? 'array' : (item === null ? 'null' : typeof item)}`));
+        }
+      });
+    }
   } else if (spec.max !== '*' && spec.max < 1) {
     issues.push(issue(ERROR, 'cardinalidad-excedida', path,
       'el perfil no admite este elemento'));
@@ -152,9 +181,29 @@ function checkElement(path, spec, value, issues) {
   if (spec.binding) checkBinding(path, spec.binding, value, issues);
 }
 
+// El tipo de un miembro [x] está codificado en el sufijo de su nombre
+// (effectiveDateTime -> DateTime, valueQuantity -> Quantity, ...). Se mapea el
+// sufijo al tipo que entiende typeMatches; lo no listado cae a 'object' (se
+// exige al menos que sea una estructura, no un primitivo suelto).
+const CHOICE_MEMBER_TYPE = {
+  DateTime: 'dateTime', Instant: 'dateTime', Date: 'dateTime',
+  String: 'string', Boolean: 'boolean', Integer: 'integer',
+  Quantity: 'Quantity', Period: 'Period',
+  CodeableConcept: 'CodeableConcept', Reference: 'Reference',
+  Age: 'object', Range: 'object', Ratio: 'object',
+};
+
+function choiceMemberType(groupName, member) {
+  const base = groupName.replace('[x]', '');
+  return CHOICE_MEMBER_TYPE[member.slice(base.length)] ?? 'object';
+}
+
 // Grupos [x]: FHIR permite un único miembro del grupo por recurso. Dos a la vez
 // no es una ambigüedad tolerable sino un recurso inválido, porque el receptor
-// no tiene regla para decidir cuál vale.
+// no tiene regla para decidir cuál vale. Si hay exactamente uno, además se
+// valida que su VALOR sea del tipo que el sufijo del miembro declara: antes el
+// valor clínico del recurso no se chequeaba (effectiveDateTime podía ser "el
+// martes", valueQuantity un string).
 function checkChoice(group, resource, issues) {
   const present = group.members.filter((m) => resource[m] !== undefined && resource[m] !== null);
 
@@ -165,6 +214,15 @@ function checkChoice(group, resource, issues) {
   if (present.length > 1) {
     issues.push(issue(ERROR, 'grupo-ambiguo', group.name,
       `sólo puede estar presente uno de los miembros del grupo y vinieron ${present.length}: ${present.join(', ')}`));
+    return;
+  }
+  if (present.length === 1) {
+    const member = present[0];
+    const type = choiceMemberType(group.name, member);
+    if (!typeMatches(type, resource[member])) {
+      issues.push(issue(ERROR, 'miembro-tipo-invalido', member,
+        `el miembro ${member} debe ser ${type} y el valor recibido no lo es`));
+    }
   }
 }
 

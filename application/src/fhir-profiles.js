@@ -69,6 +69,11 @@ const VS = {
   allergyClinical: ['active', 'inactive', 'resolved'],
   allergyType: ['allergy', 'intolerance'],
   allergyCriticality: ['low', 'high', 'unable-to-assess'],
+  administrativeGender: ['male', 'female', 'other', 'unknown'],
+  encounterStatus: [
+    'planned', 'arrived', 'triaged', 'in-progress', 'onleave',
+    'finished', 'cancelled', 'entered-in-error', 'unknown',
+  ],
 };
 
 const PROFILES = {
@@ -85,8 +90,8 @@ const PROFILES = {
         binding: { strength: 'preferred', system: SYS.loinc },
       },
       subject: { min: 1, max: 1, type: 'Reference' },
-      performer: { min: 0, max: '*', type: 'array' },
-      component: { min: 0, max: '*', type: 'array' },
+      performer: { min: 0, max: '*', type: 'array', element: 'Reference' },
+      component: { min: 0, max: '*', type: 'array', element: 'object' },
     },
     choice: [
       { name: 'effective[x]', min: 0, members: ['effectiveDateTime', 'effectivePeriod', 'effectiveInstant'] },
@@ -106,7 +111,7 @@ const PROFILES = {
         binding: { strength: 'preferred', system: SYS.loinc },
       },
       subject: { min: 1, max: 1, type: 'Reference' },
-      result: { min: 0, max: '*', type: 'array' },
+      result: { min: 0, max: '*', type: 'array', element: 'Reference' },
     },
     choice: [
       { name: 'effective[x]', min: 0, members: ['effectiveDateTime', 'effectivePeriod'] },
@@ -147,7 +152,7 @@ const PROFILES = {
         binding: { strength: 'required', system: SYS.medicationRequestIntent, values: VS.medicationRequestIntent },
       },
       subject: { min: 1, max: 1, type: 'Reference' },
-      dosageInstruction: { min: 0, max: '*', type: 'array' },
+      dosageInstruction: { min: 0, max: '*', type: 'array', element: 'object' },
     },
     choice: [
       { name: 'medication[x]', min: 1, members: ['medicationCodeableConcept', 'medicationReference'] },
@@ -176,6 +181,34 @@ const PROFILES = {
         binding: { strength: 'preferred', system: SYS.snomed },
       },
       patient: { min: 1, max: 1, type: 'Reference' },
+    },
+    choice: [],
+  },
+
+  // Paciente: identidad demográfica mínima. name obligatorio; gender ligado al
+  // ValueSet administrative-gender (required).
+  Patient: {
+    elements: {
+      name: { min: 1, max: '*', type: 'array', element: 'object' },
+      gender: {
+        min: 0, max: 1, type: 'string',
+        binding: { strength: 'required', values: VS.administrativeGender },
+      },
+      birthDate: { min: 0, max: 1, type: 'dateTime' },
+    },
+    choice: [],
+  },
+
+  // Encuentro asistencial: status ligado (required), class es una Coding
+  // (estructura), y subject apunta al paciente.
+  Encounter: {
+    elements: {
+      status: {
+        min: 1, max: 1, type: 'string',
+        binding: { strength: 'required', values: VS.encounterStatus },
+      },
+      class: { min: 1, max: 1, type: 'object' },
+      subject: { min: 1, max: 1, type: 'Reference' },
     },
     choice: [],
   },
