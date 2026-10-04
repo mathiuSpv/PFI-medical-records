@@ -89,6 +89,20 @@ No necesitan la red levantada: corren contra un world state en memoria.
 cd chaincode && go test ./consent/ -v
 ```
 
+Cobertura y mutación real (el Makefile del chaincode):
+
+```bash
+cd chaincode
+make cover            # go test -coverprofile + % total (hoy 88.1%)
+make install-tools    # instala gremlins (una sola vez)
+make mutation         # mutation testing con gate (efficacy/mcover >= 90%)
+```
+
+La mutación con gremlins NO es la inyección de fallos de los `*_test.go` (que
+prueba que una operación aborte ante un world state roto): introduce mutantes en
+el código fuente y mide cuántos mata la batería. Última corrida: 121 mutantes,
+100% killed.
+
 ## 5. Bajar todo
 
 ```bash
