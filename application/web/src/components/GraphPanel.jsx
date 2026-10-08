@@ -42,13 +42,16 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
   const [hover, setHover] = useState(null);
   const [vista, setVista] = useState({ x: 0, y: 0, k: 1 });
   const [, setFrame] = useState(0);
+  // Capa de red seleccionada: se ve UNA sola capa a la vez. Por defecto la
+  // nacional (todas las instituciones son miembros del canal nacional).
+  const [capaSel, setCapaSel] = useState('nacional');
 
   const svgRef = useRef(null);
   const mundoRef = useRef(null);
   const nodosRef = useRef([]);
   const arrastreRef = useRef(null);
 
-  const grafo = useMemo(
+  const grafoFull = useMemo(
     () => construirGrafo({
       clinics,
       assets,
@@ -59,7 +62,24 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
     [clinics, assets, consents, logs],
   );
 
-  const H = altoPara(grafo.nodos.length);
+  // La capa activa es la elegida si existe; si no (p.ej. quedó seleccionada una
+  // provincia que ya no tiene nodos), cae a la primera disponible.
+  const capaActiva = grafoFull.capas.includes(capaSel) ? capaSel : (grafoFull.capas[0] ?? 'nacional');
+
+  // Vista del grafo: SÓLO la capa activa. Cada nodo que pertenece a esa capa se
+  // ubica en su (única) banda; las aristas quedan si ambos extremos están.
+  const grafo = useMemo(() => {
+    const nodos = grafoFull.nodos
+      .filter((n) => n.capas.includes(capaActiva))
+      .map((n) => ({ ...n, capa: capaActiva }));
+    const ids = new Set(nodos.map((n) => n.id));
+    const aristas = grafoFull.aristas.filter((a) => ids.has(a.origen) && ids.has(a.destino));
+    return { nodos, aristas, capas: [capaActiva] };
+  }, [grafoFull, capaActiva]);
+
+  // El alto crece con los nodos y además reserva una franja por capa, para que
+  // cada banda (nacional / provincial) tenga lugar propio.
+  const H = Math.max(altoPara(grafo.nodos.length), (grafo.capas?.length || 1) * 170);
 
   // El layout se resuelve completo antes de pintar. Las posiciones de los nodos
   // que ya estaban se conservan: si no, emitir un activo reordenaría todo el
@@ -67,7 +87,7 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
   useEffect(() => {
     const previas = new Map(nodosRef.current.map((n) => [n.id, n]));
     const nodos = grafo.nodos.map((n) => ({ ...n }));
-    acomodar(nodos, grafo.aristas, W, H);
+    acomodar(nodos, grafo.aristas, W, H, grafo.capas);
     for (const n of nodos) {
       const vieja = previas.get(n.id);
       if (vieja) {
@@ -82,7 +102,7 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
 
   const reacomodar = useCallback(() => {
     const nodos = grafo.nodos.map((n) => ({ ...n }));
-    acomodar(nodos, grafo.aristas, W, H);
+    acomodar(nodos, grafo.aristas, W, H, grafo.capas);
     nodosRef.current = nodos;
     setVista({ x: 0, y: 0, k: 1 });
     setFrame((f) => f + 1);
@@ -159,7 +179,10 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
   return (
     <section className={`panel ${soloMapa ? 'grafo-expandido' : ''}`}>
       <div className="panel-head">
-        <div>
+        <div className="grafo-titulo">
+          {soloMapa && (
+            <img className="brand-mark-sm" src="/favicon.svg" alt="Medambar" width="28" height="28" />
+          )}
           <h2>Trazabilidad de los activos</h2>
         </div>
       </div>
@@ -211,6 +234,22 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
             </defs>
 
             <g ref={mundoRef} transform={`translate(${vista.x}, ${vista.y}) scale(${vista.k})`}>
+              {/* Bandas por capa: una franja por nivel (nacional arriba,
+                  provincias debajo). Van primero, detrás de aristas y nodos. */}
+              {(grafo.capas ?? []).map((capa, i) => {
+                const bandH = H / (grafo.capas.length || 1);
+                const top = i * bandH;
+                const esNacional = capa === 'nacional';
+                return (
+                  <g key={`banda-${capa}`} className={`grafo-banda ${esNacional ? 'banda-nacional' : 'banda-provincial'}`}>
+                    <rect x="0" y={top} width={W} height={bandH} />
+                    <text x="14" y={top + 20} className="grafo-banda-label">
+                      {esNacional ? 'Nacional · canal-nacional' : `Provincia ${capa} · canal-${capa}`}
+                    </text>
+                  </g>
+                );
+              })}
+
               {grafo.aristas.map((a, i) => {
                 const o = posiciones.get(a.origen);
                 const d = posiciones.get(a.destino);
@@ -309,6 +348,16 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
                 <li><span className="hoja" /> Activo médico digital</li>
                 <li><span className="raya rel-emitio" /> Emitió el documento</li>
               </ul>
+              {grafoFull.capas.length > 0 && (
+                <label className="grafo-capa-sel">
+                  Capa de red
+                  <select value={capaActiva} onChange={(e) => setCapaSel(e.target.value)}>
+                    {grafoFull.capas.map((c) => (
+                      <option key={c} value={c}>{c === 'nacional' ? 'Nacional' : c}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </>
           )}
 

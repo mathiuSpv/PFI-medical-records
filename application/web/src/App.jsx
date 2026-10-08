@@ -9,6 +9,17 @@ import EventFeed from './components/EventFeed.jsx';
 import GraphPanel from './components/GraphPanel.jsx';
 import AssetPage from './components/AssetPage.jsx';
 
+// Sub-módulos de la solapa Operación: cada uno es su propio panel, separados en
+// sub-solapas para no apilar los cinco en una columna que obliga a scrollear.
+const SUBMODULOS = [
+  ['instituciones', 'Instituciones'],
+  ['acciones', 'Acciones'],
+  ['activos', 'Activos'],
+  ['consentimientos', 'Consentimientos'],
+  ['auditoria', 'Auditoría'],
+  ['entregas', 'Entregas'],
+];
+
 export default function App() {
   const { clinics, reload: reloadClinics } = useClinics();
   const activas = clinics.filter((c) => c.activa);
@@ -22,6 +33,7 @@ export default function App() {
   const [tick, setTick] = useState(0);
   const [feed, setFeed] = useState([]);
   const [solapa, setSolapa] = useState('operacion');
+  const [subOp, setSubOp] = useState('instituciones');
   const bump = () => setTick((t) => t + 1);
 
   // Ruta por hash: '#/activo/<id>' abre la página del documento, '#/mapa' la
@@ -58,8 +70,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <div>
-          <h1>Panel de Prueba</h1>
+        <div className="brand">
+          <img className="brand-mark" src="/favicon.svg" alt="Medambar" width="40" height="40" />
+          <div>
+            <h1 className="wordmark">Med<span className="accent">amb</span>ar</h1>
+            <p className="subtitle">Panel de prueba · bus de interoperabilidad de activos médicos</p>
+          </div>
         </div>
       </header>
 
@@ -69,31 +85,55 @@ export default function App() {
           como grafo. La segunda va a ancho completo y sin el feed, porque el
           lienzo necesita todo el espacio disponible. */}
       <nav className="solapas" role="tablist" aria-label="Vistas">
-        {[['operacion', 'Operación'], ['red', 'Red de datos']].map(([id, etiqueta]) => (
+        {/* Operación: al pasar el cursor (o enfocar) despliega sus módulos. */}
+        <div className="solapa-wrap">
           <button
-            key={id}
             role="tab"
-            aria-selected={solapa === id}
-            className={`solapa ${solapa === id ? 'active' : ''}`}
-            onClick={() => setSolapa(id)}
+            aria-selected={solapa === 'operacion'}
+            aria-haspopup="menu"
+            className={`solapa ${solapa === 'operacion' ? 'active' : ''}`}
+            onClick={() => setSolapa('operacion')}
           >
-            {etiqueta}
+            Operación ▾
           </button>
-        ))}
+          <div className="submenu" role="menu">
+            {SUBMODULOS.map(([id, etiqueta]) => (
+              <button
+                key={id}
+                role="menuitem"
+                className={`submenu-item ${solapa === 'operacion' && subOp === id ? 'active' : ''}`}
+                onClick={() => { setSolapa('operacion'); setSubOp(id); }}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button
+          role="tab"
+          aria-selected={solapa === 'red'}
+          className={`solapa ${solapa === 'red' ? 'active' : ''}`}
+          onClick={() => setSolapa('red')}
+        >
+          Red de datos
+        </button>
       </nav>
 
       {solapa === 'operacion' ? (
-        <div className="layout">
-          <div className="main-col">
-            <ClinicsPanel clinics={clinics} onChanged={() => { reloadClinics(); bump(); }} />
-            {activas.length > 0 && <ActionsPanel clinics={activas} onDone={bump} />}
-            <AssetsPanel tick={tick} />
-            <ConsentsPanel tick={tick} />
-            <AccessLogPanel tick={tick} />
-          </div>
-          <aside className="side-col">
-            <EventFeed feed={feed} />
-          </aside>
+        <div className="main-col">
+            {/* El módulo activo se elige en el flyout de la solapa Operación. */}
+            {subOp === 'instituciones' && (
+              <ClinicsPanel clinics={clinics} onChanged={() => { reloadClinics(); bump(); }} />
+            )}
+            {subOp === 'acciones' && (
+              activas.length > 0
+                ? <ActionsPanel clinics={activas} onDone={bump} />
+                : <div className="panel"><p className="hint">No hay instituciones activas para operar.</p></div>
+            )}
+            {subOp === 'activos' && <AssetsPanel tick={tick} />}
+            {subOp === 'consentimientos' && <ConsentsPanel tick={tick} />}
+            {subOp === 'auditoria' && <AccessLogPanel tick={tick} />}
+            {subOp === 'entregas' && <EventFeed feed={feed} soloEntregas />}
         </div>
       ) : (
         <div className="main-col">
