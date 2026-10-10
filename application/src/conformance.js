@@ -49,6 +49,15 @@ const FHIR_DATETIME = /^([0-9]([0-9]([0-9][1-9]|[1-9]0)|[1-9]00)|[1-9]000)(-(0[1
 // espacios) que la forma "es-string" dejaba pasar.
 const FHIR_REFERENCE = /^[A-Za-z]+\/[A-Za-z0-9.-]{1,64}$/;
 
+// Unidades de medida. No se valida la gramática UCUM completa (es enorme): se
+// contrasta contra un conjunto de unidades clínicas conocidas (binding débil,
+// warning) y se exige coherencia cuando el propio recurso declara system UCUM.
+const UCUM_SYSTEM = 'http://unitsofmeasure.org';
+const UCUM_CONOCIDAS = new Set([
+  'mm[Hg]', 'mmHg', 'mg', 'g', 'kg', 'mL', 'L', '/min', 'bpm',
+  'mmol/L', 'mg/dL', 'cm', 'm', 'Cel', '%', '1', 'U/L', 'ng/mL', '10*3/uL',
+]);
+
 // --- Comprobación de tipos ---
 // Distingue lo que los perfiles (y los miembros [x]) necesitan. CodeableConcept
 // y Reference se validan por forma + contenido mínimo: alcanza para detectar el
@@ -74,6 +83,9 @@ function typeMatches(type, value) {
     case 'Quantity':
       // Lo que lo distingue de un objeto cualquiera: un value numérico.
       return isObject && typeof value.value === 'number';
+    case 'Range':
+      // low/high opcionales; el detalle lo valida checkRange.
+      return isObject;
     case 'Period':
       // start/end son dateTime si están; al menos uno debe estar.
       return isObject
@@ -188,14 +200,55 @@ function checkElement(path, spec, value, issues) {
 const CHOICE_MEMBER_TYPE = {
   DateTime: 'dateTime', Instant: 'dateTime', Date: 'dateTime',
   String: 'string', Boolean: 'boolean', Integer: 'integer',
-  Quantity: 'Quantity', Period: 'Period',
+  Quantity: 'Quantity', Period: 'Period', Range: 'Range',
   CodeableConcept: 'CodeableConcept', Reference: 'Reference',
-  Age: 'object', Range: 'object', Ratio: 'object',
+  Age: 'object', Ratio: 'object',
 };
 
 function choiceMemberType(groupName, member) {
   const base = groupName.replace('[x]', '');
   return CHOICE_MEMBER_TYPE[member.slice(base.length)] ?? 'object';
+}
+
+// checkQuantity valida el dominio de una Quantity: value numérico (ya lo exige
+// typeMatches, acá se reafirma) y la unidad. No valida UCUM completo: avisa si
+// la unidad no está en el conjunto conocido y rechaza la incoherencia de
+// declarar system UCUM sin code.
+function checkQuantity(path, q, issues) {
+  if (typeof q.value !== 'number' || !Number.isFinite(q.value)) {
+    issues.push(issue(ERROR, 'quantity-sin-valor-numerico', path,
+      'una Quantity debe tener value numérico'));
+    return;
+  }
+  if (q.system && q.system !== UCUM_SYSTEM) {
+    issues.push(issue(WARNING, 'quantity-sistema-no-ucum', path,
+      `la unidad declara el sistema «${q.system}», no UCUM`));
+  }
+  if (q.system === UCUM_SYSTEM && !q.code) {
+    issues.push(issue(ERROR, 'quantity-ucum-sin-code', path,
+      'declara system UCUM pero no trae code de unidad'));
+  }
+  const unidad = q.code ?? q.unit;
+  if (unidad && !UCUM_CONOCIDAS.has(unidad)) {
+    issues.push(issue(WARNING, 'unidad-desconocida', path,
+      `la unidad «${unidad}» no está en el conjunto conocido`));
+  }
+}
+
+// checkRange valida un Range: low/high son Quantity con value numérico y, si
+// están los dos, low <= high.
+function checkRange(path, r, issues) {
+  for (const limite of ['low', 'high']) {
+    if (r[limite] !== undefined && typeof r[limite]?.value !== 'number') {
+      issues.push(issue(ERROR, 'range-limite-invalido', `${path}.${limite}`,
+        `${limite} debe ser una Quantity con value numérico`));
+    }
+  }
+  if (typeof r.low?.value === 'number' && typeof r.high?.value === 'number'
+      && r.low.value > r.high.value) {
+    issues.push(issue(ERROR, 'range-invertido', path,
+      `low (${r.low.value}) es mayor que high (${r.high.value})`));
+  }
 }
 
 // Grupos [x]: FHIR permite un único miembro del grupo por recurso. Dos a la vez
@@ -219,9 +272,14 @@ function checkChoice(group, resource, issues) {
   if (present.length === 1) {
     const member = present[0];
     const type = choiceMemberType(group.name, member);
-    if (!typeMatches(type, resource[member])) {
+    const val = resource[member];
+    if (!typeMatches(type, val)) {
       issues.push(issue(ERROR, 'miembro-tipo-invalido', member,
         `el miembro ${member} debe ser ${type} y el valor recibido no lo es`));
+    } else if (type === 'Quantity') {
+      checkQuantity(member, val, issues);
+    } else if (type === 'Range') {
+      checkRange(member, val, issues);
     }
   }
 }
