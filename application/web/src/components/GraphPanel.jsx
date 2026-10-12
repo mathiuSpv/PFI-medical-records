@@ -185,6 +185,16 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
           )}
           <h2>Trazabilidad de los activos</h2>
         </div>
+        {grafoFull.capas.length > 0 && (
+          <label className="grafo-capa-sel">
+            Capa de red
+            <select value={capaActiva} onChange={(e) => setCapaSel(e.target.value)}>
+              {grafoFull.capas.map((c) => (
+                <option key={c} value={c}>{c === 'nacional' ? 'Nacional' : c}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="grafo-layout">
@@ -348,16 +358,6 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
                 <li><span className="hoja" /> Activo médico digital</li>
                 <li><span className="raya rel-emitio" /> Emitió el documento</li>
               </ul>
-              {grafoFull.capas.length > 0 && (
-                <label className="grafo-capa-sel">
-                  Capa de red
-                  <select value={capaActiva} onChange={(e) => setCapaSel(e.target.value)}>
-                    {grafoFull.capas.map((c) => (
-                      <option key={c} value={c}>{c === 'nacional' ? 'Nacional' : c}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
             </>
           )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RUTA_MAPA, api, idDeRuta, useClinics, useRuta, useSSE } from './api.js';
+import { RUTA_MAPA, api, idDeRuta, irA, useClinics, useRuta, useSSE } from './api.js';
 import ActionsPanel from './components/ActionsPanel.jsx';
 import ClinicsPanel from './components/ClinicsPanel.jsx';
 import AssetsPanel from './components/AssetsPanel.jsx';
@@ -32,15 +32,18 @@ export default function App() {
   // (tras cada acción propia y ante cada evento SSE).
   const [tick, setTick] = useState(0);
   const [feed, setFeed] = useState([]);
-  const [solapa, setSolapa] = useState('operacion');
-  const [subOp, setSubOp] = useState('instituciones');
   const bump = () => setTick((t) => t + 1);
 
-  // Ruta por hash: '#/activo/<id>' abre la página del documento, '#/mapa' la
-  // vista dedicada del grafo, cualquier otra cosa es el dashboard.
+  // Ruta por hash: cada vista/módulo tiene su URL, así es linkeable y el botón
+  // de atrás funciona. '#/activo/<id>' abre un documento, '#/mapa' el grafo a
+  // pantalla completa, '#/red' la topología, '#/operacion/<mod>' un módulo, y
+  // '/' (default) cae en Instituciones.
   const ruta = useRuta();
   const activoId = idDeRuta(ruta);
   const soloMapa = ruta === RUTA_MAPA;
+  const solapa = ruta === '/red' ? 'red' : 'operacion';
+  const subModRuta = ruta.startsWith('/operacion/') ? ruta.slice('/operacion/'.length) : '';
+  const subOp = SUBMODULOS.some(([id]) => id === subModRuta) ? subModRuta : 'instituciones';
 
   // Entregas previas al load (el feed SSE solo trae lo nuevo).
   useEffect(() => {
@@ -92,7 +95,7 @@ export default function App() {
             aria-selected={solapa === 'operacion'}
             aria-haspopup="menu"
             className={`solapa ${solapa === 'operacion' ? 'active' : ''}`}
-            onClick={() => setSolapa('operacion')}
+            onClick={() => irA(`/operacion/${subOp}`)}
           >
             Operación ▾
           </button>
@@ -102,7 +105,7 @@ export default function App() {
                 key={id}
                 role="menuitem"
                 className={`submenu-item ${solapa === 'operacion' && subOp === id ? 'active' : ''}`}
-                onClick={() => { setSolapa('operacion'); setSubOp(id); }}
+                onClick={() => irA(`/operacion/${id}`)}
               >
                 {etiqueta}
               </button>
@@ -113,7 +116,7 @@ export default function App() {
           role="tab"
           aria-selected={solapa === 'red'}
           className={`solapa ${solapa === 'red' ? 'active' : ''}`}
-          onClick={() => setSolapa('red')}
+          onClick={() => irA('/red')}
         >
           Red de datos
         </button>
