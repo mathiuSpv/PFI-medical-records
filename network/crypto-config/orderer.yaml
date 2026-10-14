@@ -1,11 +1,25 @@
-# Material criptográfico del orderer compartido (cryptogen).
-# Un solo nodo Raft alcanza para el prototipo; ambas orgs firman contra este MSP
-# solo para validar bloques del ordering service, no para transacciones de aplicación.
+# Material criptográfico del servicio de ordenamiento (cryptogen).
+#
+# Tres nodos Raft y no uno: con un único orderer el servicio tolera f=0 fallos,
+# de modo que la caída del nodo detiene el registro de transacciones en toda la
+# red. La regla de quórum de Raft es 2f+1, así que tres nodos son el mínimo que
+# tolera la caída de uno (f=1) sin perder disponibilidad ni transacciones ya
+# confirmadas. Es la condición que el Proyecto declara en RNF03 y la que hace
+# verificable la prueba de fallo de nodo.
+#
+# Los tres comparten el mismo MSP (OrdererMSP) y la misma CA de TLS: son nodos
+# del mismo servicio de ordenamiento, no organizaciones distintas.
 OrdererOrgs:
   - Name: Orderer
     Domain: example.com
     EnableNodeOUs: true
     Specs:
       - Hostname: orderer
+        SANS:
+          - localhost
+      - Hostname: orderer2
+        SANS:
+          - localhost
+      - Hostname: orderer3
         SANS:
           - localhost

@@ -30,21 +30,41 @@ CONFIGTX_DIR=${CONFIGTX_DIR:-${NETWORK_HOME}/configtx}
 infoln "Generando bloque de génesis de '${CHANNEL_NAME}' (perfil ${PROFILE})"
 FABRIC_CFG_PATH=${CONFIGTX_DIR} configtxgen -profile "${PROFILE}" -outputBlock "${BLOCKFILE}" -channelID "${CHANNEL_NAME}"
 
+# Une UN nodo de ordenamiento al canal. Se llama una vez por nodo: el canal
+# necesita a los tres para que el quórum Raft exista; con uno solo unido la
+# tolerancia a fallos sería aparente.
 joinOrderer() {
+  local node=$1 adminPort=$2
   local rc=1 counter=1 res=1
   while [ $rc -ne 0 ] && [ $counter -lt $MAX_RETRY ]; do
     sleep $DELAY
     set +e
     osnadmin channel join --channelID "${CHANNEL_NAME}" --config-block "${BLOCKFILE}" \
-      -o localhost:7053 --ca-file "$ORDERER_CA" \
-      --client-cert "$ORDERER_ADMIN_TLS_SIGN_CERT" --client-key "$ORDERER_ADMIN_TLS_PRIVATE_KEY" >/tmp/osnadmin.log 2>&1
+      -o "localhost:${adminPort}" --ca-file "$ORDERER_CA" \
+      --client-cert "$(ordererAdminCert "$node")" --client-key "$(ordererAdminKey "$node")" >/tmp/osnadmin.log 2>&1
     res=$?
     set -e
+    # Un nodo ya unido devuelve error pero el estado es el buscado: el canal
+    # existe en ese nodo. Se trata como éxito para que el script sea reentrante.
+    if grep -qi 'already exists' /tmp/osnadmin.log; then
+      infoln "${node} ya estaba unido a '${CHANNEL_NAME}'"
+      return 0
+    fi
     rc=$res
     counter=$((counter + 1))
   done
   cat /tmp/osnadmin.log
-  verifyResult $res "El orderer no pudo unirse al canal '${CHANNEL_NAME}'"
+  verifyResult $res "${node} no pudo unirse al canal '${CHANNEL_NAME}'"
+}
+
+joinAllOrderers() {
+  local node port
+  for entry in ${ORDERER_NODES}; do
+    node=${entry%%:*}
+    port=${entry##*:}
+    infoln "Uniendo ${node} al canal '${CHANNEL_NAME}'"
+    joinOrderer "$node" "$port"
+  done
 }
 
 joinPeer() {
@@ -64,8 +84,8 @@ joinPeer() {
   verifyResult $res "peer0.${org} no pudo unirse al canal '${CHANNEL_NAME}'"
 }
 
-infoln "Uniendo el orderer al canal '${CHANNEL_NAME}'"
-joinOrderer
+infoln "Uniendo el servicio de ordenamiento al canal '${CHANNEL_NAME}'"
+joinAllOrderers
 
 for org in "${MEMBER_ORGS[@]}"; do
   infoln "Uniendo peer0.${org} al canal '${CHANNEL_NAME}'"

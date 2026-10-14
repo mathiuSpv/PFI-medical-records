@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Red Fabric propia del proyecto: 1 orderer Raft + Clínica Genérica 1 +
+# Red Fabric propia del proyecto: 3 orderers Raft (tolera f=1) + Clínica
+# Genérica 1 +
 # Clínica Genérica 2. Uso:
 #
 #   ./network.sh up              levanta cryptogen + contenedores
@@ -46,9 +47,9 @@ generateCrypto() {
   fi
   which cryptogen > /dev/null || fatalln "cryptogen no está en el PATH"
 
-  infoln "Generando material criptográfico (orderer, ClinicaGenerica1MSP, ClinicaGenerica2MSP)"
+  infoln "Generando material criptográfico (3 orderers, ClinicaGenerica1MSP, ClinicaGenerica2MSP)"
   cryptogen generate --config=crypto-config/orderer.yaml --output="organizations"
-  verifyResult $? "Fallo generando el material del orderer"
+  verifyResult $? "Fallo generando el material del servicio de ordenamiento"
   cryptogen generate --config=crypto-config/generica1.yaml --output="organizations"
   verifyResult $? "Fallo generando el material de la Clínica Genérica 1"
   cryptogen generate --config=crypto-config/generica2.yaml --output="organizations"
@@ -81,10 +82,27 @@ networkUp() {
   # scripts de alta/baja y la capa de aplicación).
   registryInit
   generatePatientKey
-  infoln "Levantando orderer + peer0 de cada clínica"
+  infoln "Levantando los 3 orderers + peer0 de cada clínica"
   DOCKER_SOCK="${DOCKER_SOCK}" ${CONTAINER_CLI_COMPOSE} -f ${COMPOSE_FILE} up -d
-  sleep 3
+  waitForOrderers
   ${CONTAINER_CLI} ps -a --filter label=service=hyperledger-fabric
+}
+
+# Los tres nodos deben estar escuchando antes de crear canales: osnadmin falla
+# contra un nodo que todavía no abrió su endpoint de administración, y con
+# reintentos ciegos el error aparece recién al unir el canal.
+waitForOrderers() {
+  local ports="7053 8053 10053" intentos=30
+  for port in $ports; do
+    local n=0
+    until ${CONTAINER_CLI} ps --filter "publish=${port}" --filter status=running -q | grep -q .; do
+      n=$((n + 1))
+      [ $n -ge $intentos ] && fatalln "El orderer de puerto ${port} no llegó a estado running"
+      sleep 1
+    done
+  done
+  sleep 2
+  successln "Servicio de ordenamiento arriba (3 nodos Raft, tolera la caída de 1)"
 }
 
 addClinic() {

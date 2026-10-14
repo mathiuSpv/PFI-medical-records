@@ -120,9 +120,26 @@ peer chaincode query -C mychannel -n basic -c '{"Args":["GetAllAssets"]}'
 
 ## Paso 2 — Red propia (`network/`)
 
-Dos clínicas de ejemplo (`ClinicaGenerica1MSP`, `ClinicaGenerica2MSP`) + 1 orderer
-Raft, sin canal de sistema (channel participation API, igual que la test-network desde
-Fabric 2.3+). El material criptográfico se genera con cryptogen en `network/organizations/`
+Dos clínicas de ejemplo (`ClinicaGenerica1MSP`, `ClinicaGenerica2MSP`) + un servicio de
+ordenamiento de **3 nodos Raft**, sin canal de sistema (channel participation API, igual
+que la test-network desde Fabric 2.3+).
+
+Tres nodos y no uno: con un único orderer el servicio tolera `f=0` fallos y su caída
+detiene el registro de transacciones en toda la red. La regla de quórum de Raft es
+`2f+1`, de modo que tres es el mínimo que tolera la caída de uno (`f=1`) sin perder
+disponibilidad ni transacciones ya confirmadas. Los tres comparten `OrdererMSP` y CA de
+TLS: son nodos del mismo servicio, no organizaciones distintas.
+
+| Nodo | General | Admin | Operaciones |
+|---|---|---|---|
+| `orderer.example.com`  | 7050  | 7053  | 9443 |
+| `orderer2.example.com` | 8050  | 8053  | 9441 |
+| `orderer3.example.com` | 10050 | 10053 | 9442 |
+
+Los clientes `peer` siguen apuntando a `localhost:7050`: basta con alcanzar un nodo, el
+cluster replica. Los canales, en cambio, se unen a los tres (`ORDERER_NODES` en
+`scripts/envVar.sh`), porque un canal que sólo conoce un nodo no tiene réplica y su
+tolerancia a fallos sería aparente. El material criptográfico se genera con cryptogen en `network/organizations/`
 (gitignored, se regenera en cada `up`).
 
 ```bash
@@ -153,8 +170,8 @@ Estructura:
 ```
 network/
 ├── crypto-config/    Config de cryptogen: orderer.yaml, generica1.yaml, generica2.yaml
-├── configtx/          configtx.yaml — 2 orgs + orderer Raft, 3 perfiles (1 por canal)
-├── compose/           compose-network.yaml (orderer + peer0 de cada clínica) + peercfg/core.yaml
+├── configtx/          configtx.yaml — 2 orgs + 3 consenters Raft, 3 perfiles (1 por canal)
+├── compose/           compose-network.yaml (3 orderers + peer0 de cada clínica) + peercfg/core.yaml
 ├── scripts/           utils.sh, envVar.sh, configUpdate.sh, createChannel.sh
 ├── network.sh         up / createChannels / down
 └── organizations/, channel-artifacts/   generados en runtime, gitignored

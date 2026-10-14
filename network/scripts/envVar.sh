@@ -15,6 +15,26 @@ export ORDERER_CA=${NETWORK_HOME}/organizations/ordererOrganizations/example.com
 export ORDERER_ADMIN_TLS_SIGN_CERT=${NETWORK_HOME}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
 export ORDERER_ADMIN_TLS_PRIVATE_KEY=${NETWORK_HOME}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.key
 
+# Nodos del servicio de ordenamiento, como "host:puertoAdmin". Son tres para
+# tolerar la caída de uno (quórum Raft 2f+1 con f=1, RNF03). Todo canal debe
+# unirse a los tres: un canal que sólo conoce un nodo no tiene réplica y la
+# tolerancia a fallos sería aparente.
+#
+# El primero es además el endpoint que usan los clientes `peer` de los demás
+# scripts (localhost:7050). No hace falta que lo conozcan a los tres: el
+# cliente envía la transacción a un orderer y el cluster la replica.
+export ORDERER_NODES="orderer.example.com:7053 orderer2.example.com:8053 orderer3.example.com:10053"
+
+# Cada nodo presenta su propio certificado como identidad de cliente contra su
+# endpoint de administración. Comparten CA de TLS, así que cualquiera sería
+# aceptado por cualquiera; usar el propio deja el vínculo explícito.
+ordererAdminCert() {
+  echo "${NETWORK_HOME}/organizations/ordererOrganizations/example.com/orderers/$1/tls/server.crt"
+}
+ordererAdminKey() {
+  echo "${NETWORK_HOME}/organizations/ordererOrganizations/example.com/orderers/$1/tls/server.key"
+}
+
 # Atajos de las dos fundadoras: el README los usa en las pruebas manuales con
 # el CLI `peer`. Para cualquier otra clínica, usar peerCA <key>.
 export PEER0_GENERICA1_CA=${NETWORK_HOME}/organizations/peerOrganizations/generica1.example.com/tlsca/tlsca.generica1.example.com-cert.pem
