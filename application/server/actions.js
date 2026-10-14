@@ -5,6 +5,7 @@
 
 const { getConn, evaluateJSON, utf8 } = require('./connections');
 const { rememberKey } = require('./keys');
+const { assertConformant } = require('../src/conformance');
 const { encryptResource } = require('../src/crypto');
 const { uploadToIPFS } = require('../src/ipfs');
 const { patientRef } = require('../src/patient');
@@ -19,6 +20,11 @@ function resolvePatientIDHash({ patientId, patientIDHash }) {
 }
 
 async function emitAsset({ org, patientId, resourceType, resource }) {
+  // Conformidad antes que criptografía: una vez cifrado y anclado, el recurso
+  // queda inmutable y el error de origen se vuelve inmutable con él. Ver
+  // ../src/conformance.js para por qué este orden no es intercambiable.
+  const conformance = assertConformant(resourceType, resource);
+
   const patientIDHash = resolvePatientIDHash({ patientId });
   const { blob, aesKey } = encryptResource(resource);
   const cid = await uploadToIPFS(blob, `${resourceType.toLowerCase()}.enc`);
@@ -37,7 +43,16 @@ async function emitAsset({ org, patientId, resourceType, resource }) {
     patientIDHash,
   });
 
-  return { fhirResourceID, cid, patientIDHash, ownerOrg: mspId };
+  // Las advertencias no bloquean la emisión pero viajan al emisor: son los
+  // casos que el perfil liga con strength 'preferred' y que el estándar
+  // tolera, como un código sin sistema terminológico declarado.
+  return {
+    fhirResourceID,
+    cid,
+    patientIDHash,
+    ownerOrg: mspId,
+    conformance: { ok: true, warnings: conformance.warnings },
+  };
 }
 
 async function grantConsent({ org, grantedToOrg, patientId, patientIDHash, resourceTypes, expiry }) {
