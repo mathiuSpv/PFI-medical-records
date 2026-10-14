@@ -11,7 +11,9 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const { decryptResource, wrapKeyForRecipient, unwrapKey } = require('../src/crypto');
-const { downloadFromIPFS } = require('../src/ipfs');
+const { downloadFromIPFS, computeCID } = require('../src/ipfs');
+const { verifyAgainstLedger } = require('../src/integrity');
+const { evaluateJSON } = require('./connections');
 const { getAllOrgs, orgKeyForMsp, paths } = require('../src/config');
 
 // keyStore: fhirResourceID -> { aesKey, ownerOrgKey, ... }
@@ -80,8 +82,53 @@ async function decryptDelivery(deliveryId, orgKey) {
 
   const aesKey = unwrapKey(delivery.envelope, privateKey);
   const blob = await downloadFromIPFS(delivery.cid);
+
+  // Integridad antes que descifrado: el ledger es la autoridad sobre qué CID
+  // le corresponde al activo, y la entrega es estado local del servidor. Si se
+  // descifrara primero, un contenido cifrado válido pero ajeno al activo
+  // pasaría el control de AES-GCM sin que nadie lo note.
+  const asset = await evaluateJSON(orgKey, 'GetAsset', delivery.fhirResourceID);
+  const integridad = await verifyAgainstLedger({
+    asset,
+    cidUsado: delivery.cid,
+    blob,
+    computeCID,
+  });
+
   const resource = decryptResource(blob, aesKey);
-  return { resource, fhirResourceID: delivery.fhirResourceID, cid: delivery.cid };
+  return {
+    resource,
+    fhirResourceID: delivery.fhirResourceID,
+    cid: delivery.cid,
+    integridad,
+  };
 }
 
-module.exports = { deliveries, rememberKey, deliverKeyFor, decryptDelivery };
+// verifyAssetIntegrity descarga el contenido de un activo y lo contrasta con
+// la referencia anclada en la cadena, sin descifrarlo. No necesita la clave
+// AES: la integridad se verifica sobre el blob cifrado, que es exactamente lo
+// que el CID identifica.
+async function verifyAssetIntegrity(fhirResourceID, orgKey) {
+  const asset = await evaluateJSON(orgKey, 'GetAsset', fhirResourceID);
+  const blob = await downloadFromIPFS(asset.IpfsCid);
+  const integridad = await verifyAgainstLedger({
+    asset,
+    cidUsado: asset.IpfsCid,
+    blob,
+    computeCID,
+  });
+  return {
+    fhirResourceID,
+    cidEnLedger: asset.IpfsCid,
+    bytes: blob.length,
+    ...integridad,
+  };
+}
+
+module.exports = {
+  deliveries,
+  rememberKey,
+  deliverKeyFor,
+  decryptDelivery,
+  verifyAssetIntegrity,
+};
