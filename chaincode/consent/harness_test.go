@@ -175,6 +175,15 @@ func (h *harness) corromper(prefijo string) *harness {
 	return h
 }
 
+// versionHistorial inyecta una versión cruda en el historial de una clave, sin
+// pasar por PutState. Hace falta para construir estados que el flujo normal no
+// produce, como una versión sin valor: el peer la devuelve en casos de borrado
+// y el chaincode tiene que tolerarla.
+func (h *harness) versionHistorial(key string, mod *queryresult.KeyModification) *harness {
+	h.historial[key] = append(h.historial[key], mod)
+	return h
+}
+
 // historia implementa GetHistoryForKey sobre las versiones acumuladas por
 // PutState. Una clave sin escrituras devuelve un iterador vacío, que es lo que
 // hace el peer: no es un error, es un historial de longitud cero.

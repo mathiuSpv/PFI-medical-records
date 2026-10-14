@@ -15,6 +15,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hyperledger/fabric-protos-go-apiv2/ledger/queryresult"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"pfi-medical-records/chaincode/consent"
 )
 
@@ -346,4 +349,58 @@ func sorted(xs []string) bool {
 		}
 	}
 	return true
+}
+
+// --- Versiones sin valor en el historial -------------------------------------
+
+// El peer puede devolver una versión cuyo Value está vacío. El chaincode no
+// debe intentar deserializarla: hacerlo convertiría una versión legítima en un
+// error y cortaría la consulta del historial completo, que es justamente la
+// evidencia de trazabilidad que el Proyecto declara.
+//
+// La condición que lo evita es `len(mod.Value) > 0`. Estos dos casos la fijan:
+// sin ellos, relajarla a `>= 0` pasa inadvertido.
+
+func TestUnaVersionSinValorNoRompeElHistorialDeClinica(t *testing.T) {
+	h := newHarness(t).registrar(orgA, orgC)
+	h.versionHistorial("CLINIC_"+orgC, &queryresult.KeyModification{
+		TxId:      "tx-sin-valor",
+		Value:     []byte{},
+		Timestamp: timestamppb.New(h.now),
+	})
+
+	hist, err := h.as(orgA).sc.GetClinicHistory(h.ctx, orgC)
+	if err != nil {
+		t.Fatalf("una versión sin valor no debe hacer fallar el historial: %v", err)
+	}
+	if len(hist) != 2 {
+		t.Fatalf("se esperaban 2 versiones y hay %d", len(hist))
+	}
+	if hist[1].Clinic != nil {
+		t.Fatalf("una versión sin valor no tiene clínica asociada: %+v", hist[1].Clinic)
+	}
+	if hist[1].TxID != "tx-sin-valor" {
+		t.Fatalf("la versión debe conservar su TxID: %q", hist[1].TxID)
+	}
+}
+
+func TestUnaVersionSinValorNoRompeElHistorialDeConsentimiento(t *testing.T) {
+	h := newHarness(t).registrar(orgA, orgB)
+	h.as(orgA).otorgar("paciente-1", orgB, []string{"Observation"}, enUnAnio(h.now))
+	h.versionHistorial("CONSENT_paciente-1_"+orgB, &queryresult.KeyModification{
+		TxId:      "tx-sin-valor",
+		Value:     []byte{},
+		Timestamp: timestamppb.New(h.now),
+	})
+
+	hist, err := h.as(orgA).sc.GetConsentHistory(h.ctx, "paciente-1", orgB)
+	if err != nil {
+		t.Fatalf("una versión sin valor no debe hacer fallar el historial: %v", err)
+	}
+	if len(hist) != 2 {
+		t.Fatalf("se esperaban 2 versiones y hay %d", len(hist))
+	}
+	if hist[1].Consent != nil {
+		t.Fatalf("una versión sin valor no tiene consentimiento asociado: %+v", hist[1].Consent)
+	}
 }
