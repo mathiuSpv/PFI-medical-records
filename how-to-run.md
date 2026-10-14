@@ -34,9 +34,9 @@ Todo desde `network/` (cada comando espera al anterior):
 
 ```bash
 cd network
-./network.sh up              # cryptogen + orderer + peer de cada clínica
-./network.sh createChannels  # canal-nacional + canal privado por clínica
-./network.sh deployCC        # chaincode de consentimiento en canal-nacional
+./network.sh up              # cryptogen + 3 orderers Raft + peer de cada clínica
+./network.sh createChannels  # canal nacional + uno por jurisdicción + bitácoras
+./network.sh deployCC        # chaincode en el canal nacional y en cada provincial
 ./network.sh ipfsUp          # nodo IPFS (Kubo), API en :5001
 ```
 
@@ -72,7 +72,7 @@ Desde el dashboard, panel **Instituciones del bus**, o por consola:
 ```bash
 cd network
 ./network.sh clinics                                  # listado y estado
-./network.sh addClinic rosario "Hospital Rosario"     # alta   (~40 s)
+./network.sh addClinic rosario "Hospital Rosario" santa-fe   # alta (~40 s)
 ./network.sh removeClinic rosario "fin de convenio"   # baja   (~20 s)
 ```
 
