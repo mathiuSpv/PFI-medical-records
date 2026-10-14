@@ -2,7 +2,7 @@
 # Helpers para computar, firmar y enviar transacciones de actualización de
 # config de canal. Se usan para fijar anchor peers y para el alta/baja de
 # clínicas (que es, en el fondo, agregar o sacar una org del grupo Application
-# de canal-universal). Requiere jq y configtxlator.
+# de canal-nacional). Requiere jq y configtxlator.
 
 NETWORK_HOME=${NETWORK_HOME:-${PWD}}
 . "${NETWORK_HOME}/scripts/envVar.sh"

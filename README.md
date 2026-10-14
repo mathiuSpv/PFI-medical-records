@@ -14,7 +14,7 @@ intercambiando recursos entre sí sobre la misma red. No son las únicas posible
 pueden incorporar y sacar instituciones con la red andando — ver
 [Alta y baja de instituciones](#alta-y-baja-de-instituciones).
 
-- **Canal público (`canal-universal`)**: todas las orgs. Solo metadatos en claro
+- **Canal público (`canal-nacional`)**: todas las orgs. Solo metadatos en claro
   (`fhir_resource_id`, `resource_type`, `ipfs_cid`, `patient_id_hash`, firma, timestamp).
   Nunca contiene payload clínico.
 - **Canal privado por org (`canal-generica-1`, `canal-generica-2`)**: bitácora interna
@@ -142,13 +142,55 @@ cluster replica. Los canales, en cambio, se unen a los tres (`ORDERER_NODES` en
 tolerancia a fallos sería aparente. El material criptográfico se genera con cryptogen en `network/organizations/`
 (gitignored, se regenera en cada `up`).
 
+### Topología jerárquica de canales
+
+Los canales se organizan en tres niveles, que reproducen la estructura federal
+del sistema de salud argentino:
+
+| Nivel | Canal | Miembros | Qué circula |
+|---|---|---|---|
+| Nacional | `canal-nacional` | todas las clínicas activas | lo que cruza un límite provincial: referencia *on-chain*, consentimiento y auditoría |
+| Jurisdiccional | `canal-<provincia>` | las clínicas de esa provincia | el intercambio entre instituciones de la misma jurisdicción, que no sale de ella |
+| Privado | `canal-<clinica>` | la clínica | su bitácora interna |
+
+La competencia sanitaria en Argentina es provincial y el alcance de los sistemas
+existentes se agota en los límites de cada jurisdicción. Una topología plana, con
+un único canal compartido por todas las instituciones del país, obligaría a cada
+provincia a exponer su tráfico interno al resto sin necesidad.
+
+Las dos clínicas fundadoras están en jurisdicciones distintas a propósito
+(`generica1` en `caba`, `generica2` en `buenos-aires`), para que el escenario de
+referencia ejercite el intercambio interjurisdiccional. Al dar de alta una
+clínica en una provincia que ya existe, su canal pasa a tener más de un miembro
+y el intercambio intrajurisdiccional queda demostrable:
+
+```bash
+./network.sh addClinic sanmartin "Hospital San Martín" caba
+```
+
+El chaincode se despliega en el canal nacional y en cada canal jurisdiccional:
+el intercambio dentro de una provincia se resuelve en su propio canal, así que
+el contrato tiene que estar ahí también. Las bitácoras internas no lo llevan,
+porque son registro de la institución y no bus de intercambio.
+
+La regla de ruteo vive en un solo lugar, `channelForOrgs()` en
+`application/src/config.js`, y está cubierta por `application/test/topology.test.js`.
+
+> **Limitación abierta.** El estado de Fabric es por canal: un consentimiento
+> otorgado en `canal-caba` no existe en `canal-nacional`, y una transacción no
+> puede abarcar dos canales. Por eso las operaciones del BFF siguen resolviéndose
+> en el canal nacional, que es donde vive el índice completo de activos. La salida
+> prevista es una operación de chaincode que publique la referencia en el nivel
+> nacional cuando se otorga un acceso interjurisdiccional, de modo que el activo
+> nazca en el canal de su provincia y ascienda sólo cuando cruza un límite.
+
 ```bash
 cd network
 
 # cryptogen (si organizations/ no existe) + docker compose up.
 ./network.sh up
 
-# Genera y une los 3 canales: canal-universal (ambas clínicas), canal-generica-1
+# Genera y une los 3 canales: canal-nacional (ambas clínicas), canal-generica-1
 # y canal-generica-2 (bitácora interna de cada una). Fija anchor peers.
 ./network.sh createChannels
 
@@ -156,13 +198,13 @@ cd network
 ./network.sh down
 ```
 
-Verificar el aislamiento de los canales privados (cada peer debe ver `canal-universal`
+Verificar el aislamiento de los canales privados (cada peer debe ver `canal-nacional`
 más solo su propio canal privado):
 
 ```bash
 . scripts/envVar.sh
-setGlobals generica1 && peer channel list   # canal-universal, canal-generica-1
-setGlobals generica2   && peer channel list   # canal-universal, canal-generica-2
+setGlobals generica1 && peer channel list   # canal-nacional, canal-generica-1
+setGlobals generica2   && peer channel list   # canal-nacional, canal-generica-2
 ```
 
 Estructura:
@@ -194,7 +236,7 @@ Decisiones de diseño:
 ## Paso 3 — Chaincode de consentimiento + ABAC (`chaincode/`)
 
 Chaincode Go (`pfi-medical-records/chaincode`, contractapi) desplegado en
-`canal-universal`. Cuatro áreas, cada una en su archivo bajo `chaincode/consent/`:
+`canal-nacional`. Cuatro áreas, cada una en su archivo bajo `chaincode/consent/`:
 
 - **`asset.go`** — `EmitAsset(fhirResourceID, resourceType, ipfsCid, patientIDHash)`
   registra metadatos de un recurso ya subido a IPFS por fuera del ledger (el chaincode
@@ -237,7 +279,7 @@ resultado como oráculo de si esa org tiene o no consentimiento sobre un pacient
 cd network
 ./network.sh up
 ./network.sh createChannels
-./network.sh deployCC   # vendoriza, empaqueta, instala, aprueba y commitea en canal-universal
+./network.sh deployCC   # vendoriza, empaqueta, instala, aprueba y commitea en canal-nacional
 ```
 
 Prueba manual con el CLI `peer` (requiere endorsement de ambas orgs — política default
@@ -246,7 +288,7 @@ de ambas). Dejar ~3s entre transacciones dependientes (ver Troubleshooting):
 
 ```bash
 cd network && . scripts/envVar.sh
-CHANNEL=canal-universal; CC=consent
+CHANNEL=canal-nacional; CC=consent
 
 invokeBoth() {
   peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
@@ -333,7 +375,7 @@ El flujo de `demo.js` (los nombres de función son literales del chaincode del p
 1. **Genérica 1** cifra `sample-data/observation-001.json` (AES-256-GCM), lo sube a
    IPFS y valida que `IPFS.cat` + descifrado reproduzcan el original exacto.
 2. `EmitAsset(fhirResourceID, "Observation", cid, patientIDHash)` — metadatos en claro en
-   `canal-universal`, la clave AES nunca sale del proceso de Genérica 1.
+   `canal-nacional`, la clave AES nunca sale del proceso de Genérica 1.
 3. Genérica 1 empieza a escuchar eventos de chaincode (`getChaincodeEvents`).
 4. **Solicitud de acceso**: paso fuera del ledger en esta etapa (no hay función de
    chaincode para "pedir" — queda representado como un log). Después, `GrantConsent`
@@ -365,7 +407,7 @@ npm run listen -- generica1   # en una terminal
 npm run listen -- generica2     # en otra
 ```
 
-Se queda escuchando `AccessPermitted` en `canal-universal` hasta Ctrl+C. Comparte la
+Se queda escuchando `AccessPermitted` en `canal-nacional` hasta Ctrl+C. Comparte la
 lógica de lectura del stream con `demo.js` (`src/events.js`) — la única diferencia es
 qué hace con cada evento (`demo.js` intenta envolver una clave si tiene el recurso en su
 `keyStore` en memoria; `listen.js` solo imprime el payload).
@@ -416,7 +458,7 @@ reiniciarlo; los metadatos on-chain e IPFS persisten); tablas sin paginación.
 
 ## Referencia de paciente
 
-`canal-universal` guarda el identificador del paciente seudonimizado y **en claro para
+`canal-nacional` guarda el identificador del paciente seudonimizado y **en claro para
 todos los miembros del canal**. Con un hash pelado —SHA-256 del DNI, que es lo que hacía
 antes la capa de aplicación— la seudonimización es aparente: el espacio de DNI argentinos
 son ~10⁸ valores, así que cualquier miembro del canal los recorre en segundos, arma la
@@ -451,7 +493,7 @@ Dos decisiones que conviene poder defender:
 
 La red dejó de ser de dos clínicas fijas: se pueden incorporar y sacar instituciones con
 la red andando. **No es un alta simulada** — cada alta crea una organización Fabric real
-(MSP y peer propios) y la incorpora a `canal-universal` con una actualización de
+(MSP y peer propios) y la incorpora a `canal-nacional` con una actualización de
 configuración de canal firmada por las clínicas que ya estaban.
 
 ```bash
@@ -468,11 +510,11 @@ mismos scripts y transmite el progreso por SSE mientras tardan).
 
 1. `cryptogen` genera el MSP y el material TLS de la clínica.
 2. `configtxgen -printOrg` produce su definición de organización.
-3. Se baja el config de `canal-universal`, se le inyecta la org en `Application.groups`,
+3. Se baja el config de `canal-nacional`, se le inyecta la org en `Application.groups`,
    se computa el delta y **lo firman las clínicas existentes** (política `MAJORITY
    Admins`). Este paso es el alta de verdad: al commitearse, la org es miembro.
 4. Se levanta su `peer0` desde una plantilla de compose renderizada.
-5. El peer hace join a `canal-universal` y publica su anchor peer.
+5. El peer hace join a `canal-nacional` y publica su anchor peer.
 6. Se crea su canal privado (`canal-<key>`), del que es única miembro.
 7. Instala el chaincode y aprueba la definición ya commiteada — con eso puede endosar.
    No hace falta re-commitear: las aprobaciones son por org y la política implícita

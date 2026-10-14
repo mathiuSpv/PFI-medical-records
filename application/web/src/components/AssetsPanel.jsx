@@ -1,4 +1,4 @@
-// Tabla de activos emitidos en canal-universal (metadatos públicos: el
+// Tabla de activos emitidos en canal-nacional (metadatos públicos: el
 // payload clínico está cifrado en IPFS).
 import { orgByMsp, shortHash, useFetch } from '../api.js';
 

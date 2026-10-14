@@ -4,8 +4,8 @@
 # Clínica Genérica 2. Uso:
 #
 #   ./network.sh up              levanta cryptogen + contenedores
-#   ./network.sh createChannels  crea canal-universal, canal-generica-1 y
-#                                 canal-generica-2 (requiere 'up' previo)
+#   ./network.sh createChannels  crea el canal nacional, uno por jurisdicción
+#                                 y la bitácora de cada clínica (requiere 'up')
 #   ./network.sh deployCC        despliega el chaincode de consentimiento
 #   ./network.sh down            baja todo y borra material generado
 #   ./network.sh ipfsUp          levanta el nodo IPFS local (Kubo), API en :5001
@@ -134,24 +134,56 @@ listClinics() {
   done < <(jq -c '.clinics[]' "$(registryFile)")
 }
 
+# Topología jerárquica de canales, en tres niveles:
+#
+#   nacional        intercambio interjurisdiccional. Sólo circula por él lo que
+#                   cruza un límite provincial.
+#   jurisdiccional  uno por provincia. Resuelve el intercambio entre las
+#                   instituciones radicadas en ella sin salir de la provincia.
+#   privado         bitácora interna de cada institución.
 createChannels() {
   [ -d "organizations/peerOrganizations" ] || fatalln "Correr './network.sh up' primero"
 
-  infoln "== canal-universal (ClinicaGenerica1MSP + ClinicaGenerica2MSP) =="
-  scripts/createChannel.sh canal-universal CanalUniversal generica1 generica2
+  infoln "== Nivel nacional: canal-nacional (intercambio interjurisdiccional) =="
+  scripts/createChannel.sh canal-nacional CanalNacional generica1 generica2
 
-  infoln "== canal-generica-1 (bitácora interna, solo ClinicaGenerica1MSP) =="
+  infoln "== Nivel jurisdiccional: un canal por provincia =="
+  while read -r key canal perfil; do
+    [ -n "$canal" ] || continue
+    local miembros
+    miembros=$(clinicsInJurisdiction "$key")
+    infoln "-- ${canal} (miembros: ${miembros}) --"
+    # shellcheck disable=SC2086
+    scripts/createChannel.sh "$canal" "$perfil" $miembros
+  done < <(jurisdictions)
+
+  infoln "== Bitácoras internas: un canal privado por clínica =="
+  infoln "-- canal-generica-1 (solo ClinicaGenerica1MSP) --"
   scripts/createChannel.sh canal-generica-1 CanalGenerica1 generica1
-
-  infoln "== canal-generica-2 (bitácora interna, solo ClinicaGenerica2MSP) =="
+  infoln "-- canal-generica-2 (solo ClinicaGenerica2MSP) --"
   scripts/createChannel.sh canal-generica-2 CanalGenerica2 generica2
 
-  successln "Los tres canales quedaron creados y unidos"
+  successln "Canales creados en los tres niveles (nacional, jurisdiccional y privado)"
 }
 
+# El chaincode va en el canal nacional y en cada canal jurisdiccional: el
+# intercambio dentro de una provincia se resuelve en su propio canal, así que
+# el contrato tiene que estar desplegado ahí también. Las bitácoras internas no
+# lo llevan, porque son registro de la institución y no bus de intercambio.
 deployCC() {
   [ -d "organizations/peerOrganizations" ] || fatalln "Correr './network.sh up' y './network.sh createChannels' primero"
-  scripts/deployChaincode.sh
+
+  infoln "== Chaincode en canal-nacional =="
+  scripts/deployChaincode.sh canal-nacional
+
+  while read -r key canal _perfil; do
+    [ -n "$canal" ] || continue
+    local miembros
+    miembros=$(clinicsInJurisdiction "$key")
+    infoln "== Chaincode en ${canal} (miembros: ${miembros}) =="
+    # shellcheck disable=SC2086
+    scripts/deployChaincode.sh "$canal" $miembros
+  done < <(jurisdictions)
 }
 
 ipfsUp() {

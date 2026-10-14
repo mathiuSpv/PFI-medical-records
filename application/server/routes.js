@@ -17,6 +17,7 @@ const health = require('./health');
 const keys = require('./keys');
 const renaper = require('./renaper');
 const conformance = require('../src/conformance');
+const { getChannels, jurisdictionChannels, channelForOrgs, NATIONAL_CHANNEL } = require('../src/config');
 
 const wrap = (handler) => async (req, res) => {
   try {
@@ -73,6 +74,20 @@ module.exports = function buildRoutes(broadcast) {
 
   // Verificación de identidad simulada (RENAPER mock): informativa, no
   // condiciona ninguna transacción del chaincode.
+  // Topología de canales por nivel: el tablero la usa para mostrar la
+  // estructura federal de la red en lugar de una lista plana de canales.
+  router.get('/topology', wrap(() => ({
+    nacional: NATIONAL_CHANNEL,
+    jurisdicciones: jurisdictionChannels(),
+    canales: getChannels(),
+  })));
+
+  // Canal por el que corresponde resolver un intercambio entre dos
+  // instituciones: el de la provincia si comparten jurisdicción, el nacional
+  // si la cruzan.
+  router.get('/topology/channel-for', wrap((req) =>
+    ({ channel: channelForOrgs(req.query.a, req.query.b) })));
+
   // Valida un recurso sin emitirlo. Sirve al tablero para mostrar el
   // resultado de la capa de conformidad y a la batería de pruebas para
   // medir aceptación y rechazo sin tocar la red ni IPFS.

@@ -2,7 +2,7 @@
 // esos eventos y las dos cosas que el dashboard necesita: el feed en vivo y la
 // entrega automática de clave ante cada PERMIT.
 //
-// Una sola suscripción alcanza: canal-universal es público a todas las
+// Una sola suscripción alcanza: canal-nacional es público a todas las
 // clínicas, así que cualquiera de ellas ve todos los eventos.
 'use strict';
 

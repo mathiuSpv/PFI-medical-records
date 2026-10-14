@@ -35,8 +35,8 @@ Todo desde `network/` (cada comando espera al anterior):
 ```bash
 cd network
 ./network.sh up              # cryptogen + orderer + peer de cada clínica
-./network.sh createChannels  # canal-universal + canal privado por clínica
-./network.sh deployCC        # chaincode de consentimiento en canal-universal
+./network.sh createChannels  # canal-nacional + canal privado por clínica
+./network.sh deployCC        # chaincode de consentimiento en canal-nacional
 ./network.sh ipfsUp          # nodo IPFS (Kubo), API en :5001
 ```
 
@@ -77,7 +77,7 @@ cd network
 ```
 
 El alta crea una organización Fabric real (MSP y peer propios) y la incorpora a
-`canal-universal` con una actualización de config firmada por las clínicas existentes;
+`canal-nacional` con una actualización de config firmada por las clínicas existentes;
 la baja hace el camino inverso. El detalle de cada paso está en el
 [README § Alta y baja de instituciones](README.md#alta-y-baja-de-instituciones).
 

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# addOrg.sh <key> "<Nombre visible>"
+# addOrg.sh <key> "<Nombre visible>" [jurisdiccion]
 #
 # Alta de una clínica NUEVA en la red en caliente. No es un alta simulada: crea
 # una organización Fabric de verdad (MSP propio, peer propio) y la incorpora a
-# canal-universal con una actualización de configuración de canal firmada por
+# canal-nacional con una actualización de configuración de canal firmada por
 # las clínicas que ya estaban. Pasos:
 #
 #   1. cryptogen        -> MSP + material TLS de la clínica
 #   2. configtxgen      -> definición de la org (-printOrg)
 #   3. config update    -> se inyecta la org en Application.groups de
-#                          canal-universal, firmado por las orgs existentes
+#                          canal-nacional, firmado por las orgs existentes
 #                          (política MAJORITY Admins). Acá pasa a ser miembro.
 #   4. docker compose   -> se levanta su peer0
-#   5. join + anchor    -> el peer se une a canal-universal y se publica
+#   5. join + anchor    -> el peer se une a canal-nacional y se publica
 #   6. canal privado    -> su bitácora interna (único miembro: ella)
 #   7. chaincode        -> install + approve de la definición ya commiteada,
 #                          para que pueda endosar (no hace falta re-commitear:
@@ -28,11 +28,14 @@ NETWORK_HOME=${NETWORK_HOME:-${PWD}}
 . "${NETWORK_HOME}/scripts/envVar.sh"
 . "${NETWORK_HOME}/scripts/configUpdate.sh"
 
-CHANNEL_NAME="canal-universal"
+CHANNEL_NAME="canal-nacional"
 CC_NAME="consent"
 
 KEY=${1:-}
 NOMBRE=${2:-}
+# Jurisdicción (clave en minúsculas y con guiones: caba, buenos-aires, santa-fe).
+# Determina el canal provincial en el que opera la clínica.
+JURISDICCION=${3:-}
 
 [ -n "$KEY" ] || fatalln "Uso: ./network.sh addClinic <key> \"<Nombre visible>\""
 
@@ -110,7 +113,7 @@ ORG_DEF="${NETWORK_HOME}/channel-artifacts/${KEY}-org.json"
 FABRIC_CFG_PATH="${GEN_CONFIGTX}" configtxgen -printOrg "${MSPID}" > "${ORG_DEF}"
 successln "Definición escrita en channel-artifacts/${KEY}-org.json"
 
-# --- 3) Alta de la membresía en canal-universal -------------------------------
+# --- 3) Alta de la membresía en canal-nacional -------------------------------
 infoln "[3/8] Incorporando ${MSPID} a '${CHANNEL_NAME}' (config update firmado por las orgs existentes)"
 READER=$(clinicKeys activa | head -1)
 ORG_JSON=$(cat "${ORG_DEF}")
@@ -123,7 +126,20 @@ modifyChannelConfig "${CHANNEL_NAME}" "${READER}" \
 # es el del canal, y en el canal ya está).
 registryAdd "${KEY}" "${NOMBRE}" "${MSPID}" "${DOMAIN}" \
   "${PEER_PORT}" "${CC_PORT}" "${OPS_PORT}" \
-  "${PRIVATE_CHANNEL}" "${CHANNEL_PROFILE}" "${GEN_CONFIGTX}" "${COMPOSE_FILE}"
+  "${PRIVATE_CHANNEL}" "${CHANNEL_PROFILE}" "${GEN_CONFIGTX}" "${COMPOSE_FILE}" "${JURISDICCION}"
+
+if [ -n "${JURISDICCION}" ]; then
+  if [ "$(clinicsInJurisdiction "${JURISDICCION}" | wc -w)" -le 1 ]; then
+    infoln "La jurisdicción '${JURISDICCION}' no tenía clínicas activas: su canal provincial"
+    infoln "todavía no existe. Crearlo con:"
+    infoln "  scripts/createChannel.sh canal-${JURISDICCION} Canal<Jurisdiccion> ${KEY}"
+    infoln "y agregar el perfil correspondiente a configtx/configtx.yaml."
+  else
+    infoln "La clínica se incorpora a la jurisdicción '${JURISDICCION}' (canal-${JURISDICCION})."
+    infoln "Para que opere en ese canal hay que unir su peer y desplegar el chaincode ahí:"
+    infoln "  scripts/deployChaincode.sh canal-${JURISDICCION} $(clinicsInJurisdiction "${JURISDICCION}")"
+  fi
+fi
 
 # --- 4) Peer ------------------------------------------------------------------
 infoln "[4/8] Levantando peer0.${DOMAIN}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # removeOrg.sh <key> ["<motivo>"]
 #
-# Baja de una clínica: la saca de la membresía de canal-universal con una
+# Baja de una clínica: la saca de la membresía de canal-nacional con una
 # actualización de configuración firmada por las demás, y apaga su peer.
 #
 #   1. RevokeConsent  -> se revocan los consentimientos vigentes OTORGADOS a la
@@ -30,7 +30,7 @@ NETWORK_HOME=${NETWORK_HOME:-${PWD}}
 . "${NETWORK_HOME}/scripts/envVar.sh"
 . "${NETWORK_HOME}/scripts/configUpdate.sh"
 
-CHANNEL_NAME="canal-universal"
+CHANNEL_NAME="canal-nacional"
 CC_NAME="consent"
 
 KEY=${1:-}

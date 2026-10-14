@@ -111,7 +111,7 @@ async function conExclusion(descripcion, fn) {
 }
 
 // addClinic da de alta una clínica de verdad: MSP nuevo, peer nuevo y
-// actualización de config de canal-universal firmada por las existentes.
+// actualización de config de canal-nacional firmada por las existentes.
 // Tarda ~40 s, así que va emitiendo el progreso por SSE.
 async function addClinic({ key, nombre }, broadcast) {
   const k = validarKey(key);
