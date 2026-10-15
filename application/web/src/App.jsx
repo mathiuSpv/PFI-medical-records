@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RUTA_MAPA, api, idDeRuta, irA, useClinics, useRuta, useSSE } from './api.js';
 import ActionsPanel from './components/ActionsPanel.jsx';
 import ClinicsPanel from './components/ClinicsPanel.jsx';
@@ -33,6 +33,7 @@ export default function App() {
   const [tick, setTick] = useState(0);
   const [feed, setFeed] = useState([]);
   const [opMenu, setOpMenu] = useState(false); // flyout de módulos de Operación
+  const opTimer = useRef(null); // cierre diferido del flyout al salir del área
   const bump = () => setTick((t) => t + 1);
 
   // Ruta por hash: cada vista/módulo tiene su URL, así es linkeable y el botón
@@ -98,7 +99,11 @@ export default function App() {
           lienzo necesita todo el espacio disponible. */}
       <nav className="solapas" role="tablist" aria-label="Vistas">
         {/* Operación: al pasar el cursor (o enfocar) despliega sus módulos. */}
-        <div className="solapa-wrap">
+        <div
+          className="solapa-wrap"
+          onMouseEnter={() => { if (opTimer.current) { clearTimeout(opTimer.current); opTimer.current = null; } }}
+          onMouseLeave={() => { opTimer.current = setTimeout(() => setOpMenu(false), 1000); }}
+        >
           <button
             role="tab"
             aria-selected={solapa === 'operacion'}
