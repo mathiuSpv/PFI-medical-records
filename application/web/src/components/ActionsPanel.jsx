@@ -12,6 +12,7 @@
 // se ve de quién es el recurso y qué se le autorizó.
 import { useEffect, useState } from 'react';
 import { api, clinicByKey } from '../api.js';
+import Dropdown from './Dropdown.jsx';
 
 export const RESOURCE_TYPES = ['Observation', 'MedicationRequest', 'DiagnosticReport', 'Condition'];
 
@@ -135,9 +136,12 @@ export default function ActionsPanel({ clinics, onDone }) {
       <div className="form">
         <label>
           {tab === 'emitir' ? 'Emite como' : 'Otorga'}
-          <select value={org ?? ''} onChange={(e) => setOrg(e.target.value)}>
-            {clinics.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-          </select>
+          <Dropdown
+            value={org ?? ''}
+            onChange={setOrg}
+            options={clinics.map((c) => ({ value: c.key, label: c.label }))}
+            ariaLabel={tab === 'emitir' ? 'Emite como' : 'Otorga'}
+          />
         </label>
 
         <label>
@@ -165,9 +169,12 @@ export default function ActionsPanel({ clinics, onDone }) {
           <>
             <label>
               Tipo de recurso FHIR
-              <select value={resourceType} onChange={(e) => setResourceType(e.target.value)}>
-                {RESOURCE_TYPES.map((t) => <option key={t}>{t}</option>)}
-              </select>
+              <Dropdown
+                value={resourceType}
+                onChange={setResourceType}
+                options={RESOURCE_TYPES.map((t) => ({ value: t, label: t }))}
+                ariaLabel="Tipo de recurso FHIR"
+              />
             </label>
             <label>
               Recurso
@@ -181,9 +188,12 @@ export default function ActionsPanel({ clinics, onDone }) {
           <>
             <label>
               Otorgar a
-              <select value={targetKey ?? ''} onChange={(e) => setTargetKey(e.target.value)}>
-                {destinatarias.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select>
+              <Dropdown
+                value={targetKey ?? ''}
+                onChange={setTargetKey}
+                options={destinatarias.map((c) => ({ value: c.key, label: c.label }))}
+                ariaLabel="Otorgar a"
+              />
             </label>
             <div className="checkboxes">
               {RESOURCE_TYPES.map((t) => (

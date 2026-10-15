@@ -11,6 +11,7 @@
 // así que no hay por dónde buscarlo.
 import { useEffect, useState } from 'react';
 import { api, irA, orgByMsp, useFetch } from '../api.js';
+import Dropdown from './Dropdown.jsx';
 
 function Bloque({ txId, channel }) {
   const [estado, setEstado] = useState({ cargando: true });
@@ -187,13 +188,13 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
         <div className="acciones-activo">
           <label className="field-label">
             Pedir acceso como
-            <select
+            <Dropdown
               value={solicitanteValido}
-              onChange={(e) => setSolicitante(e.target.value)}
+              onChange={setSolicitante}
               disabled={!!ocupado || solicitantes.length < 2}
-            >
-              {solicitantes.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
+              options={solicitantes.map((c) => ({ value: c.key, label: c.label }))}
+              ariaLabel="Pedir acceso como"
+            />
           </label>
           <button className="primary" disabled={!!ocupado || !quienPide} onClick={pedirAcceso}>
             {ocupado === 'pedir' ? 'Evaluando…' : 'Pedir acceso'}
@@ -203,13 +204,13 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
             <>
               <label className="field-label">
                 Ceder a
-                <select
+                <Dropdown
                   value={destinoValido}
-                  onChange={(e) => setDestino(e.target.value)}
+                  onChange={setDestino}
                   disabled={!!ocupado || destinatarias.length < 2}
-                >
-                  {destinatarias.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                </select>
+                  options={destinatarias.map((c) => ({ value: c.key, label: c.label }))}
+                  ariaLabel="Ceder a"
+                />
               </label>
               {cedido ? (
                 <button className="danger" disabled={!!ocupado} onClick={revocar}>

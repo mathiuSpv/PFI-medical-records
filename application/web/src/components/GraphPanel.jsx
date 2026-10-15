@@ -8,6 +8,7 @@
 // grafo sacudirse hasta encontrar su lugar no aporta y se ve mal.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RUTA_MAPA, irA, orgByMsp, rutaActivo, useFetch } from '../api.js';
+import Dropdown from './Dropdown.jsx';
 import { TIPOS, acomodar, construirGrafo } from '../grafo.js';
 
 // El lienzo arranca bajo —el grafo comparte la solapa con el ABM, que va abajo,
@@ -188,11 +189,12 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
         {grafoFull.capas.length > 0 && (
           <label className="grafo-capa-sel">
             Capa de red
-            <select value={capaActiva} onChange={(e) => setCapaSel(e.target.value)}>
-              {grafoFull.capas.map((c) => (
-                <option key={c} value={c}>{c === 'nacional' ? 'Nacional' : c}</option>
-              ))}
-            </select>
+            <Dropdown
+              value={capaActiva}
+              onChange={setCapaSel}
+              options={grafoFull.capas.map((c) => ({ value: c, label: c === 'nacional' ? 'Nacional' : c }))}
+              ariaLabel="Capa de red"
+            />
           </label>
         )}
       </div>
