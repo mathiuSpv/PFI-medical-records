@@ -12,7 +12,7 @@
 NETWORK_HOME=${NETWORK_HOME:-${PWD}}
 CLINICS_FILE="${NETWORK_HOME}/organizations/clinics.json"
 
-# Puertos: las dos clínicas fundadoras conservan los históricos (7051/9051)
+# Puertos: las dos clínicas iniciales conservan los históricos (7051/9051)
 # para no romper nada de lo ya documentado. Las que se den de alta después
 # arrancan en 11051 y suben de a 1000, con el puerto de chaincode en +1 y el
 # de operations (healthz) en su propia serie.
@@ -24,11 +24,11 @@ registryFile() { echo "${CLINICS_FILE}"; }
 
 # Cada clínica declara su jurisdicción además de su canal privado: el canal
 # jurisdiccional es el que resuelve el intercambio dentro de la provincia, y el
-# nacional queda para lo que cruza un límite provincial. Las dos fundadoras
+# nacional queda para lo que cruza un límite provincial. Las dos iniciales
 # están en jurisdicciones distintas para que el escenario de referencia
 # ejercite el intercambio interjurisdiccional.
 #
-# registryInit — crea el registro con las dos clínicas fundadoras si no existe.
+# registryInit — crea el registro con las dos clínicas iniciales si no existe.
 # Idempotente: si ya está, no lo pisa (conserva las altas hechas después).
 registryInit() {
   if [ -f "${CLINICS_FILE}" ]; then
@@ -53,8 +53,7 @@ registryInit() {
       "profile": "CanalGenerica1",
       "configtxDir": "",
       "composeFile": "",
-      "estado": "activa",
-      "fundadora": true
+      "estado": "activa"
     },
     {
       "key": "generica2",
@@ -71,8 +70,7 @@ registryInit() {
       "profile": "CanalGenerica2",
       "configtxDir": "",
       "composeFile": "",
-      "estado": "activa",
-      "fundadora": true
+      "estado": "activa"
     }
   ]
 }
@@ -175,7 +173,7 @@ registryAdd() {
         jurisdictionChannel: (if $jurChannel == "" then null else $jurChannel end),
         jurisdictionProfile: (if $jurProfile == "" then null else $jurProfile end),
         configtxDir: $configtxDir, composeFile: $composeFile,
-        estado: "activa", fundadora: false
+        estado: "activa"
       }]' "${CLINICS_FILE}" > "${tmp}" && mv "${tmp}" "${CLINICS_FILE}"
 }
 
@@ -187,14 +185,15 @@ registrySetEstado() {
      '(.clinics[] | select(.key == $k) | .estado) = $e' "${CLINICS_FILE}" > "${tmp}" && mv "${tmp}" "${CLINICS_FILE}"
 }
 
-# composeFilesActivos — rutas de los compose generados de clínicas no fundadoras
-# que siguen activas (las fundadoras viven en compose-network.yaml).
+# composeFilesActivos — rutas de los compose generados de las clínicas con
+# compose propio (las dos iniciales viven en compose-network.yaml y tienen
+# composeFile vacío, así que quedan fuera) que siguen activas.
 composeFilesActivos() {
-  jq -r '.clinics[] | select(.estado == "activa" and .fundadora == false) | .composeFile' "${CLINICS_FILE}"
+  jq -r '.clinics[] | select(.estado == "activa" and .composeFile != "") | .composeFile' "${CLINICS_FILE}"
 }
 
 composeFilesTodos() {
-  jq -r '.clinics[] | select(.fundadora == false) | .composeFile' "${CLINICS_FILE}"
+  jq -r '.clinics[] | select(.composeFile != "") | .composeFile' "${CLINICS_FILE}"
 }
 
 # jurisdictions — una línea por jurisdicción presente entre las clínicas

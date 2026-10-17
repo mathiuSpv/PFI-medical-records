@@ -77,7 +77,7 @@ generatePatientKey() {
 
 networkUp() {
   generateCrypto
-  # El registro de clínicas nace acá con las dos fundadoras; a partir de este
+  # El registro de clínicas nace acá con las dos clínicas iniciales; a partir de este
   # punto es la fuente de verdad de qué orgs existen (lo leen envVar.sh, los
   # scripts de alta/baja y la capa de aplicación).
   registryInit

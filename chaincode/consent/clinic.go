@@ -103,9 +103,9 @@ func requireActiveCaller(ctx contractapi.TransactionContextInterface) (string, e
 //
 // Quien la registra tiene que ser una clínica ya activa, con una excepción
 // acotada: si el registro está vacío, cualquier miembro del canal puede
-// escribir la primera entrada. Es el arranque en frío de la red — las
-// fundadoras no tienen a nadie que las avale — y se cierra solo, porque a
-// partir de la primera clínica activa la excepción deja de aplicar.
+// escribir la primera entrada. Es el arranque en frío de la red — la primera
+// clínica no tiene a nadie que la avale — y se cierra solo, porque a partir de
+// la primera clínica activa la excepción deja de aplicar.
 func (s *SmartContract) RegisterClinic(ctx contractapi.TransactionContextInterface, mspID string, nombre string, domain string, peerEndpoint string) error {
 	if mspID == "" || nombre == "" {
 		return fmt.Errorf("mspID y nombre son obligatorios")

@@ -4,7 +4,7 @@
 #
 # Ya no hay orgs cableadas: setGlobals resuelve MSP ID, puerto y rutas leyendo
 # el registro de clínicas (scripts/orgRegistry.sh), así que funciona igual para
-# las dos fundadoras que para cualquier clínica dada de alta en caliente.
+# las dos clínicas iniciales que para cualquier clínica dada de alta en caliente.
 
 NETWORK_HOME=${NETWORK_HOME:-${PWD}}
 . "${NETWORK_HOME}/scripts/utils.sh"
@@ -35,7 +35,7 @@ ordererAdminKey() {
   echo "${NETWORK_HOME}/organizations/ordererOrganizations/example.com/orderers/$1/tls/server.key"
 }
 
-# Atajos de las dos fundadoras: el README los usa en las pruebas manuales con
+# Atajos de las dos clínicas iniciales: el README los usa en las pruebas manuales con
 # el CLI `peer`. Para cualquier otra clínica, usar peerCA <key>.
 export PEER0_GENERICA1_CA=${NETWORK_HOME}/organizations/peerOrganizations/generica1.example.com/tlsca/tlsca.generica1.example.com-cert.pem
 export PEER0_GENERICA2_CA=${NETWORK_HOME}/organizations/peerOrganizations/generica2.example.com/tlsca/tlsca.generica2.example.com-cert.pem

@@ -7,19 +7,19 @@
 // cada componente reciba la lista por props.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Las dos fundadoras conservan sus colores; a las demás se les asigna uno
-// estable derivado del key, para que la misma clínica se vea siempre igual.
-const COLOR_FUNDADORAS = {
+// Las dos clínicas iniciales conservan sus colores fijos; a las demás se les
+// asigna uno estable derivado del key, para que la misma clínica se vea igual.
+const COLOR_FIJOS = {
   generica1: 'var(--org1)',
   generica2: 'var(--org2)',
 };
 // Tonos medios, no pasteles: estos colores se usan como texto (el nombre de la
 // institución en tablas y feed) sobre fondo blanco, así que todos tienen que
-// pasar 4.5:1. Se evitan el azul y el verde de las fundadoras.
+// pasar 4.5:1. Se evitan el azul y el verde de los dos colores fijos.
 const PALETA = ['#7b3fc4', '#a04a12', '#b3336b', '#0f6f86', '#5d4bbf', '#7a5c00'];
 
 export function colorFor(key) {
-  if (COLOR_FUNDADORAS[key]) return COLOR_FUNDADORAS[key];
+  if (COLOR_FIJOS[key]) return COLOR_FIJOS[key];
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
   return PALETA[h % PALETA.length];

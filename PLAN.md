@@ -207,7 +207,7 @@ como filas de una tabla. Post-etapa-1 (no estaba en el plan original).
       `ClinicDeactivated`. `CheckAccess` deniega a las orgs no activas (como DENY
       registrado, no como error: el intento de una institución dada de baja es
       justamente lo que interesa poder auditar); `EmitAsset` y `GrantConsent` las
-      rechazan. `deployChaincode.sh` registra las fundadoras al desplegar.
+      rechazan. `deployChaincode.sh` registra las dos iniciales al desplegar.
 - [x] BFF: `GET/POST /api/clinics`, `POST /api/clinics/:key/baja`, progreso por SSE.
       Los scripts se lanzan con `spawn` y argumentos como array (nunca shell), con el
       `key` validado contra la misma regex que usa el script. Un alta/baja a la vez
