@@ -60,7 +60,6 @@ function toOrg(clinic) {
     jurisdiccion: clinic.jurisdiccion ?? null,
     jurisdictionChannel: clinic.jurisdictionChannel ?? null,
     estado: clinic.estado,
-    fundadora: clinic.fundadora === true,
   };
 }
 
@@ -85,13 +84,13 @@ function getAllOrgs() {
 //   - Nacional:    canal-nacional (único).
 //   - Provincial:  canal-<jurisdiccion>  (p.ej. canal-caba, canal-buenos-aires).
 //   - Privado:     la bitácora interna de cada institución.
-// Dos esquemas históricos para el privado: las fundadoras usan
+// Dos esquemas históricos para el privado: las dos clínicas iniciales usan
 // canal-generica-1 / canal-generica-2 (con número y guion, definidos a mano en
 // network.sh/configtx), y las clínicas dadas de alta en caliente usan
 // canal-<key> sin número (derivado en addOrg.sh). La diferencia es cosmética —
-// nunca colisionan porque <key> es único y las fundadoras son fijas— y es a lo
+// nunca colisionan porque <key> es único y las dos iniciales son fijas— y es a lo
 // que apunta la devolución del 50% ("no coinciden los números de canales"):
-// unificar el esquema de las fundadoras a canal-<key> implica recrear sus
+// unificar el esquema de las dos iniciales a canal-<key> implica recrear sus
 // canales en el orderer, así que queda para la tarea de topología dinámica, no
 // acá.
 function getChannels() {

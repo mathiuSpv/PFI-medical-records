@@ -8,7 +8,7 @@ de salud sobre **Hyperledger Fabric** (control de acceso, consentimiento, audito
 
 ## Arquitectura (resumen)
 
-Orgs fundadoras (prototipo): **Clínica Genérica 1** (`ClinicaGenerica1MSP`) y
+Orgs iniciales (prototipo): **Clínica Genérica 1** (`ClinicaGenerica1MSP`) y
 **Clínica Genérica 2** (`ClinicaGenerica2MSP`), dos instituciones de salud
 intercambiando recursos entre sí sobre la misma red. No son las únicas posibles: se
 pueden incorporar y sacar instituciones con la red andando — ver
@@ -158,7 +158,7 @@ existentes se agota en los límites de cada jurisdicción. Una topología plana,
 un único canal compartido por todas las instituciones del país, obligaría a cada
 provincia a exponer su tráfico interno al resto sin necesidad.
 
-Las dos clínicas fundadoras están en jurisdicciones distintas a propósito
+Las dos clínicas iniciales están en jurisdicciones distintas a propósito
 (`generica1` en `caba`, `generica2` en `buenos-aires`), para que el escenario de
 referencia ejercite el intercambio interjurisdiccional. Al dar de alta una
 clínica en una provincia que ya existe, su canal pasa a tener más de un miembro
@@ -575,9 +575,9 @@ las dos—, firma también ella: es una salida voluntaria.
 ### El registro de clínicas
 
 `network/organizations/clinics.json` es la fuente de verdad local de qué orgs existen, con
-qué MSP ID y en qué puertos. Lo crea `network.sh up` con las dos fundadoras y lo actualizan
+qué MSP ID y en qué puertos. Lo crea `network.sh up` con las dos clínicas iniciales y lo actualizan
 los scripts de alta/baja. Lo leen `envVar.sh` (así `setGlobals` funciona igual para una
-clínica nueva que para las fundadoras), `deployChaincode.sh` y la capa de aplicación
+clínica nueva que para las dos iniciales), `deployChaincode.sh` y la capa de aplicación
 (`application/src/config.js`, que lo relee cuando cambia el mtime — por eso un alta
 aparece en el dashboard sin reiniciar el backend). Es estado de runtime: nace con `up` y
 muere con `down`, igual que el material criptográfico que describe.
@@ -593,7 +593,7 @@ sin registrar es, deliberadamente, tratada como no habilitada).
 
 ### Puertos
 
-Las fundadoras conservan los suyos (7051/9051). Las nuevas arrancan en 11051 y suben de a
+Las dos iniciales conservan los suyos (7051/9051). Las nuevas arrancan en 11051 y suben de a
 1000, con operations en la serie 9446+. Los de una clínica dada de baja no se reutilizan.
 
 ### Limitación conocida

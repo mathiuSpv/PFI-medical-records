@@ -52,7 +52,6 @@ fi
 MSPID=$(clinicField "$KEY" mspId)
 NOMBRE=$(clinicField "$KEY" nombre)
 COMPOSE_FILE=$(clinicField "$KEY" composeFile)
-FUNDADORA=$(clinicField "$KEY" fundadora)
 
 if [ ${#MOTIVO} -gt 200 ] || [[ "$MOTIVO" == *$'\n'* ]]; then
   fatalln "Motivo inválido: máximo 200 caracteres, sin saltos de línea"
@@ -156,12 +155,12 @@ else
   : "${CONTAINER_CLI_COMPOSE:=${CONTAINER_CLI} compose}"
 fi
 
-if [ "${FUNDADORA}" = "true" ]; then
-  # Las fundadoras viven en compose-network.yaml junto al orderer: se para solo
-  # su servicio, sin tocar el resto de la red.
+if [ -z "${COMPOSE_FILE}" ]; then
+  # Las dos clínicas iniciales viven en compose-network.yaml junto al orderer
+  # (sin compose propio): se para solo su servicio, sin tocar el resto de la red.
   ${CONTAINER_CLI} rm -f "peer0.$(clinicField "$KEY" domain)" > /dev/null 2>&1 || true
   successln "   contenedor del peer eliminado (el volumen queda; 'network.sh down' lo limpia)"
-elif [ -n "${COMPOSE_FILE}" ] && [ -f "${COMPOSE_FILE}" ]; then
+elif [ -f "${COMPOSE_FILE}" ]; then
   DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}" ${CONTAINER_CLI_COMPOSE} -f "${COMPOSE_FILE}" down --volumes
   successln "   peer y volumen eliminados"
 else

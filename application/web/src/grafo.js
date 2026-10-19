@@ -65,7 +65,6 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
         'MSP ID': c.mspId,
         'Canal privado': c.privateChannel,
         Estado: c.estado,
-        Fundadora: c.fundadora ? 'sí' : 'no',
       },
     });
   }
