@@ -176,13 +176,15 @@ porque son registro de la institución y no bus de intercambio.
 La regla de ruteo vive en un solo lugar, `channelForOrgs()` en
 `application/src/config.js`, y está cubierta por `application/test/topology.test.js`.
 
-> **Limitación abierta.** El estado de Fabric es por canal: un consentimiento
-> otorgado en `canal-caba` no existe en `canal-nacional`, y una transacción no
-> puede abarcar dos canales. Por eso las operaciones del BFF siguen resolviéndose
-> en el canal nacional, que es donde vive el índice completo de activos. La salida
-> prevista es una operación de chaincode que publique la referencia en el nivel
-> nacional cuando se otorga un acceso interjurisdiccional, de modo que el activo
-> nazca en el canal de su provincia y ascienda sólo cuando cruza un límite.
+> **Cross-canal (resuelto).** El estado de Fabric es por canal y una transacción
+> no puede abarcar dos, así que el ascenso entre niveles no lo hace el chaincode
+> (no hay cross-channel invoke) sino el BFF, como una segunda transacción: el
+> activo nace en el canal de su provincia (`actions.emitAsset` → `channelForOrgs`)
+> y su REFERENCIA se publica en el nacional (`PublishAssetRef`) cuando un
+> consentimiento cruza una frontera jurisdiccional. Las lecturas unen el nacional
+> con cada provincial y de-duplican (`server/readmodel.js`); el acceso se evalúa
+> en el canal donde dueño y solicitante se cruzan. El dashboard muestra una capa
+> por vez (`GraphPanel`, selector "Capa de red").
 
 ```bash
 cd network
@@ -312,6 +314,11 @@ Nota sobre `hashPaciente001` en el ejemplo: es un literal de prueba. En el flujo
 valor lo produce la capa de aplicación con HMAC y la clave de red — ver
 [Referencia de paciente](#referencia-de-paciente).
 
+Los tests del chaincode corren sin red (`go test ./consent/`). El `Makefile` agrega
+cobertura (`make cover`, ~88 %) y **mutation testing** real con gremlins (`make mutation`,
+gate efficacy/mcover ≥ 90 %): mide cuántos mutantes mata la batería, no solo la inyección
+de fallos de los `*_test.go`.
+
 ## Paso 4 — Nodo IPFS local (`network/compose/compose-ipfs.yaml`)
 
 Kubo (implementación de referencia de IPFS) de un solo nodo, para el payload clínico
@@ -355,14 +362,28 @@ application/
 ├── package.json
 ├── sample-data/observation-001.json   Recurso FHIR-ish de ejemplo (no es FHIR completo)
 └── src/
-    ├── config.js    MSP IDs, endpoints de peer, paths a network/organizations
-    ├── connect.js    Conexión Gateway (gRPC + identidad + firma) por org
-    ├── crypto.js     AES-256-GCM del payload + envoltura ECIES-like de la clave
-    ├── ipfs.js       add/cat contra la API HTTP de Kubo
-    ├── events.js     Listener de eventos de chaincode, compartido por demo.js y listen.js
-    ├── demo.js       Flujo completo de punta a punta (npm run demo)
-    └── listen.js     Listener standalone por org (npm run listen -- <org>)
+    ├── config.js        MSP IDs, endpoints, paths y ruteo de canal (channelForOrgs)
+    ├── connect.js       Conexión Gateway (gRPC + identidad + firma) por org
+    ├── crypto.js        AES-256-GCM + AAD del payload, envoltura ECIES-like de la clave
+    ├── conformance.js   Validación FHIR R4 antes de emitir (gate de conformidad)
+    ├── fhir-profiles.js Perfiles: tipos soportados, cardinalidades y bindings
+    ├── integrity.js     Integridad: CID anclado vs recalculado del blob
+    ├── patient.js       Referencia de paciente seudonimizada (HMAC + clave de red)
+    ├── ipfs.js          add/cat contra la API HTTP de Kubo
+    ├── events.js        Listener de eventos de chaincode, compartido por demo.js y listen.js
+    ├── demo.js          Flujo completo de punta a punta (npm run demo)
+    └── listen.js        Listener standalone por org (npm run listen -- <org>)
 ```
+
+**Conformidad del payload.** Antes de cifrar y anclar, el recurso pasa por
+`conformance.js` contra los perfiles de `fhir-profiles.js`: tipo declarado,
+cardinalidades (incluidos los grupos `[x]`, con el valor del miembro
+type-chequeado), contenido de arrays, `dateTime` por la regex FHIR R4,
+referencias con forma `Tipo/id` y bindings terminológicos (`required` rechaza,
+`preferred` advierte). Tipos soportados: Observation, DiagnosticReport,
+Condition, MedicationRequest, AllergyIntolerance, Patient, Encounter; cualquier
+otro se rechaza por desconocido. Validar en la emisión es lo único que cierra la
+brecha: el ledger es inmutable pero ciego al contenido.
 
 ```bash
 cd network && ./network.sh up && ./network.sh createChannels && ./network.sh deployCC && ./network.sh ipfsUp
@@ -391,14 +412,27 @@ El flujo de `demo.js` (los nombres de función son literales del chaincode del p
 Los certificados de Fabric (cryptogen) usan EC P-256, no RSA — no hay "cifrar con la
 clave pública" directo tipo RSA-OAEP. `crypto.js#wrapKeyForRecipient` arma un esquema
 tipo ECIES: ECDH efímero contra la clave pública del certificado del solicitante → HKDF-SHA256
-para derivar una clave de envoltura → esa clave envuelve (AES-256-GCM) la clave real del
-recurso. Solo quien tenga la clave privada correspondiente al certificado puede repetir
+(con salt aleatorio por sobre) para derivar una clave de envoltura → esa clave envuelve
+(AES-256-GCM) la clave real del recurso. Solo quien tenga la clave privada correspondiente al certificado puede repetir
 el ECDH y desenvolverla — nunca la tenemos nosotros, es la clave privada de la otra org.
 
 Para que la org dueña del recurso tenga el certificado del solicitante sin necesidad de
 un directorio externo, `CheckAccess` (chaincode, `access.go`) agrega
 `RequesterCertPEM` al `AccessLog`/evento vía `ctx.GetClientIdentity().GetX509Certificate()`
 — determinista, no es una llamada de red, es la identidad de quien firmó la tx.
+
+### Ligado del contenido (AAD) y cifrado en reposo
+
+El GCM del payload y el del envoltorio de clave llevan **AAD**: el blob se autentica contra
+la identidad del activo (`fhirResourceID` + tipo + `patientIDHash`) y el sobre contra su
+recurso. Un ciphertext ajeno no desenvuelve aunque coincidiera su CID — la garantía que
+`integrity.js` sostenía a mano baja a la capa AEAD. Un tag inválido sale como
+`AuthenticationError` tipado.
+
+El `keyStore` del BFF (claves AES + entregas) persiste bajo `application/.data/` **cifrado
+en reposo** con AES-256-GCM; la clave maestra se deriva (scrypt) de `PFI_KEYSTORE_SECRET`
+(sin esa variable, una clave de desarrollo no secreta, y se avisa). No es un HSM, pero el
+disco ya no guarda las claves en claro.
 
 ### Listener por org
 
@@ -498,9 +532,10 @@ configuración de canal firmada por las clínicas que ya estaban.
 
 ```bash
 cd network
-./network.sh clinics                                  # listado y estado
-./network.sh addClinic rosario "Hospital Rosario"     # alta   (~40 s)
-./network.sh removeClinic rosario "fin de convenio"   # baja   (~20 s)
+./network.sh clinics                                    # listado y estado
+./network.sh addClinic rosario "Hospital Rosario"       # alta solo-nacional (~40 s)
+./network.sh addClinic caba3 "Clínica CABA 3" caba      # alta en una jurisdicción existente
+./network.sh removeClinic rosario "fin de convenio"     # baja   (~20 s)
 ```
 
 También desde el dashboard, en el panel **Instituciones del bus** (el BFF corre estos
@@ -519,7 +554,11 @@ mismos scripts y transmite el progreso por SSE mientras tardan).
 7. Instala el chaincode y aprueba la definición ya commiteada — con eso puede endosar.
    No hace falta re-commitear: las aprobaciones son por org y la política implícita
    `MAJORITY Endorsement` se recalcula sola con el nuevo miembro.
-8. `RegisterClinic` deja el alta asentada on-chain.
+8. **Si se indicó una jurisdicción existente**, se la suma también a su canal
+   provincial (`canal-<jur>`): config update firmado por los miembros de ese canal,
+   join del peer, aprobación del chaincode y `RegisterClinic` en ese canal (el
+   registro de clínicas es por canal). El dashboard pasa la jurisdicción en el alta.
+9. `RegisterClinic` deja el alta asentada on-chain en `canal-nacional`.
 
 La baja hace el camino inverso: revoca los consentimientos vigentes **hacia** esa org
 (cada uno lo revoca su otorgante, que es el único que puede), asienta `DeactivateClinic`,
@@ -560,6 +599,10 @@ Las fundadoras conservan los suyos (7051/9051). Las nuevas arrancan en 11051 y s
 No se puede volver a dar de alta un `key` ya usado: su canal privado quedó creado en el
 orderer y el `osnadmin channel join` fallaría. Para volver a incorporar una institución
 que se fue, usar otro `key`.
+
+El alta solo puede sumar una clínica a una jurisdicción **que ya tiene canal**: crear uno
+nuevo (profile de configtx + `createChannel` + `osnadmin join`) queda fuera del alcance
+del prototipo. Una jurisdicción sin canal se rechaza con un mensaje claro.
 
 ## Troubleshooting
 
