@@ -554,10 +554,12 @@ mismos scripts y transmite el progreso por SSE mientras tardan).
 7. Instala el chaincode y aprueba la definición ya commiteada — con eso puede endosar.
    No hace falta re-commitear: las aprobaciones son por org y la política implícita
    `MAJORITY Endorsement` se recalcula sola con el nuevo miembro.
-8. **Si se indicó una jurisdicción existente**, se la suma también a su canal
-   provincial (`canal-<jur>`): config update firmado por los miembros de ese canal,
-   join del peer, aprobación del chaincode y `RegisterClinic` en ese canal (el
-   registro de clínicas es por canal). El dashboard pasa la jurisdicción en el alta.
+8. **Si se indicó una jurisdicción**, la clínica opera también en su canal
+   provincial (`canal-<jur>`). Si la jurisdicción ya tiene canal, se la suma
+   (config update firmado por sus miembros, join, aprobación del chaincode y
+   `RegisterClinic` en ese canal — el registro es por canal). Si es la primera
+   clínica de la jurisdicción, se **crea** el canal (`createChannel` + `osnadmin
+   join` + chaincode, create/join seguro). El dashboard pasa la jurisdicción en el alta.
 9. `RegisterClinic` deja el alta asentada on-chain en `canal-nacional`.
 
 La baja hace el camino inverso: revoca los consentimientos vigentes **hacia** esa org
@@ -599,10 +601,6 @@ Las fundadoras conservan los suyos (7051/9051). Las nuevas arrancan en 11051 y s
 No se puede volver a dar de alta un `key` ya usado: su canal privado quedó creado en el
 orderer y el `osnadmin channel join` fallaría. Para volver a incorporar una institución
 que se fue, usar otro `key`.
-
-El alta solo puede sumar una clínica a una jurisdicción **que ya tiene canal**: crear uno
-nuevo (profile de configtx + `createChannel` + `osnadmin join`) queda fuera del alcance
-del prototipo. Una jurisdicción sin canal se rechaza con un mensaje claro.
 
 ## Troubleshooting
 
