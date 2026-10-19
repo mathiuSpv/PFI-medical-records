@@ -32,6 +32,7 @@ export default function App() {
   // (tras cada acción propia y ante cada evento SSE).
   const [tick, setTick] = useState(0);
   const [feed, setFeed] = useState([]);
+  const [opMenu, setOpMenu] = useState(false); // flyout de módulos de Operación
   const bump = () => setTick((t) => t + 1);
 
   // Ruta por hash: cada vista/módulo tiene su URL, así es linkeable y el botón
@@ -44,6 +45,15 @@ export default function App() {
   const solapa = ruta === '/red' ? 'red' : 'operacion';
   const subModRuta = ruta.startsWith('/operacion/') ? ruta.slice('/operacion/'.length) : '';
   const subOp = SUBMODULOS.some(([id]) => id === subModRuta) ? subModRuta : 'instituciones';
+
+  // Cierra el flyout de Operación al clickear fuera. El click que lo abre ya
+  // propagó antes de que este listener se monte, así que no se auto-cierra.
+  useEffect(() => {
+    if (!opMenu) return undefined;
+    const cerrar = () => setOpMenu(false);
+    document.addEventListener('click', cerrar);
+    return () => document.removeEventListener('click', cerrar);
+  }, [opMenu]);
 
   // Entregas previas al load (el feed SSE solo trae lo nuevo).
   useEffect(() => {
@@ -94,18 +104,19 @@ export default function App() {
             role="tab"
             aria-selected={solapa === 'operacion'}
             aria-haspopup="menu"
+            aria-expanded={opMenu}
             className={`solapa ${solapa === 'operacion' ? 'active' : ''}`}
-            onClick={() => irA(`/operacion/${subOp}`)}
+            onClick={(e) => { e.stopPropagation(); setOpMenu((o) => !o); }}
           >
             Operación ▾
           </button>
-          <div className="submenu" role="menu">
+          <div className={`submenu ${opMenu ? 'open' : ''}`} role="menu">
             {SUBMODULOS.map(([id, etiqueta]) => (
               <button
                 key={id}
                 role="menuitem"
                 className={`submenu-item ${solapa === 'operacion' && subOp === id ? 'active' : ''}`}
-                onClick={() => irA(`/operacion/${id}`)}
+                onClick={() => { irA(`/operacion/${id}`); setOpMenu(false); }}
               >
                 {etiqueta}
               </button>
@@ -116,7 +127,7 @@ export default function App() {
           role="tab"
           aria-selected={solapa === 'red'}
           className={`solapa ${solapa === 'red' ? 'active' : ''}`}
-          onClick={() => irA('/red')}
+          onClick={() => { irA('/red'); setOpMenu(false); }}
         >
           Red de datos
         </button>
