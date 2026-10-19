@@ -69,6 +69,23 @@ if clinicExists "$KEY"; then
   fatalln "Ya existe una clínica con key '${KEY}' (estado: ${ESTADO_PREVIO}). Elegir otro key."
 fi
 
+# --- Jurisdicción: sólo sumarse a un canal provincial YA existente -----------
+# El prototipo NO crea canales provinciales nuevos (requeriría un profile en
+# configtx.yaml + createChannel + osnadmin join). Si se pide una jurisdicción
+# que todavía no tiene canal (sería la primera clínica en ella), se rechaza acá,
+# antes de tocar nada. PROV_MEMBERS son las clínicas que YA están en esa
+# jurisdicción (firmarán la incorporación); KEY aún no está en el registro.
+PROV_MEMBERS=()
+PROV_CHANNEL=""
+if [ -n "${JURISDICCION}" ]; then
+  if ! [[ "${JURISDICCION}" =~ ^[a-z][a-z0-9-]{1,30}$ ]]; then
+    fatalln "jurisdicción inválida: '${JURISDICCION}' (minúsculas, dígitos y guiones)"
+  fi
+  PROV_CHANNEL="canal-${JURISDICCION}"
+  mapfile -t PROV_MEMBERS < <(clinicsInJurisdiction "${JURISDICCION}" | tr ' ' '\n' | sed '/^$/d')
+  [ "${#PROV_MEMBERS[@]}" -ge 1 ] || fatalln "La jurisdicción '${JURISDICCION}' no tiene un canal provincial creado (sería la primera clínica). El prototipo sólo soporta sumarse a un canal provincial existente; crear uno nuevo queda para la topología dinámica."
+fi
+
 # --- Identificadores derivados -----------------------------------------------
 PASCAL="$(tr '[:lower:]' '[:upper:]' <<< "${KEY:0:1}")${KEY:1}"
 MSPID="Clinica${PASCAL}MSP"
@@ -129,16 +146,7 @@ registryAdd "${KEY}" "${NOMBRE}" "${MSPID}" "${DOMAIN}" \
   "${PRIVATE_CHANNEL}" "${CHANNEL_PROFILE}" "${GEN_CONFIGTX}" "${COMPOSE_FILE}" "${JURISDICCION}"
 
 if [ -n "${JURISDICCION}" ]; then
-  if [ "$(clinicsInJurisdiction "${JURISDICCION}" | wc -w)" -le 1 ]; then
-    infoln "La jurisdicción '${JURISDICCION}' no tenía clínicas activas: su canal provincial"
-    infoln "todavía no existe. Crearlo con:"
-    infoln "  scripts/createChannel.sh canal-${JURISDICCION} Canal<Jurisdiccion> ${KEY}"
-    infoln "y agregar el perfil correspondiente a configtx/configtx.yaml."
-  else
-    infoln "La clínica se incorpora a la jurisdicción '${JURISDICCION}' (canal-${JURISDICCION})."
-    infoln "Para que opere en ese canal hay que unir su peer y desplegar el chaincode ahí:"
-    infoln "  scripts/deployChaincode.sh canal-${JURISDICCION} $(clinicsInJurisdiction "${JURISDICCION}")"
-  fi
+  infoln "   jurisdicción '${JURISDICCION}': se la unirá a '${PROV_CHANNEL}' al final del alta"
 fi
 
 # --- 4) Peer ------------------------------------------------------------------
@@ -253,6 +261,77 @@ else
   else
     successln "Clínica registrada on-chain"
   fi
+fi
+
+# --- Jurisdicción: unir al canal provincial existente ------------------------
+# Config update del canal provincial agregando la org, FIRMADO SÓLO POR SUS
+# MIEMBROS (no por todas las activas: una org ajena no es firmante válido de ese
+# canal). Después el peer se une y aprueba el chaincode ya commiteado ahí.
+if [ -n "${JURISDICCION}" ]; then
+  infoln "[jurisdicción] Incorporando ${MSPID} a '${PROV_CHANNEL}' (firman sus miembros: ${PROV_MEMBERS[*]})"
+  PROV_READER=${PROV_MEMBERS[0]}
+  PBASE="${NETWORK_HOME}/channel-artifacts/add_${KEY}_${JURISDICCION}"
+  fetchChannelConfig "${PROV_READER}" "${PROV_CHANNEL}" "${PBASE}_config.json"
+  jq ".channel_group.groups.Application.groups += {\"${MSPID}\": ${ORG_JSON}}" \
+    "${PBASE}_config.json" > "${PBASE}_modified.json"
+  createConfigUpdate "${PROV_CHANNEL}" "${PBASE}_config.json" "${PBASE}_modified.json" "${PBASE}_update.pb"
+  applyConfigUpdate "${PROV_CHANNEL}" "${PBASE}_update.pb" "${PROV_MEMBERS[@]}"
+
+  setGlobals "${KEY}"
+  PBLK="${NETWORK_HOME}/channel-artifacts/${PROV_CHANNEL}_for_${KEY}.block"
+  peer channel fetch 0 "${PBLK}" -o localhost:7050 \
+    --ordererTLSHostnameOverride orderer.example.com -c "${PROV_CHANNEL}" --tls --cafile "$ORDERER_CA"
+  rc=1; counter=1
+  while [ $rc -ne 0 ] && [ $counter -lt 6 ]; do
+    sleep 3
+    set +e
+    peer channel join -b "${PBLK}" >/tmp/join_prov.log 2>&1
+    rc=$?
+    set -e
+    counter=$((counter + 1))
+  done
+  cat /tmp/join_prov.log
+  verifyResult $rc "peer0.${DOMAIN} no pudo unirse a '${PROV_CHANNEL}'"
+  setAnchorPeerFor "${KEY}" "${PROV_CHANNEL}"
+
+  # Chaincode: aprobar la definición ya commiteada en el canal provincial para
+  # que la nueva org pueda endosar ahí (ya quedó instalado en el peer en [7/8]).
+  COMMITTED_P=$(peer lifecycle chaincode querycommitted --channelID "${PROV_CHANNEL}" --name "${CC_NAME}" --output json 2>/dev/null || echo '')
+  if [ -n "${COMMITTED_P}" ] && [ -f "${CC_PKG:-/nonexistent}" ]; then
+    CVP=$(echo "${COMMITTED_P}" | jq -r '.version')
+    CSP=$(echo "${COMMITTED_P}" | jq -r '.sequence')
+    PIDP=$(peer lifecycle chaincode calculatepackageid "${CC_PKG}")
+    set +e
+    peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
+      --tls --cafile "$ORDERER_CA" --channelID "${PROV_CHANNEL}" --name "${CC_NAME}" \
+      --version "${CVP}" --package-id "${PIDP}" --sequence "${CSP}" >/tmp/approve_prov.log 2>&1
+    set -e
+    cat /tmp/approve_prov.log
+
+    # El registro de clínicas es POR CANAL: sin esto el chaincode deniega a la
+    # nueva org en el canal provincial ("no está registrada como clínica
+    # activa"), aunque sí lo esté en el nacional. La invoca un miembro existente
+    # y la endosan los miembros del canal (ya incluye a la nueva, que acaba de
+    # aprobar el chaincode).
+    setGlobals "${PROV_READER}"
+    PREG=$(jq -nc --arg m "${MSPID}" --arg n "${NOMBRE}" --arg d "${DOMAIN}" \
+      --arg e "peer0.${DOMAIN}:${PEER_PORT}" \
+      '{function:"RegisterClinic", Args:[$m, $n, $d, $e]}')
+    set +e
+    # shellcheck disable=SC2046
+    peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com \
+      --tls --cafile "$ORDERER_CA" -C "${PROV_CHANNEL}" -n "${CC_NAME}" \
+      $(peerAddressArgs "${PROV_MEMBERS[@]}" "${KEY}") -c "${PREG}" >/tmp/register_prov.log 2>&1
+    preg_rc=$?
+    set -e
+    cat /tmp/register_prov.log
+    if [ $preg_rc -eq 0 ]; then
+      successln "${MSPID} registrada como clínica activa en '${PROV_CHANNEL}'"
+    else
+      errorln "No se pudo registrar ${MSPID} en '${PROV_CHANNEL}' (reintentar a mano)"
+    fi
+  fi
+  successln "${MSPID} unido a '${PROV_CHANNEL}'"
 fi
 
 successln "== '${NOMBRE}' dada de alta =="

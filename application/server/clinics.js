@@ -17,6 +17,17 @@ const { NETWORK_HOME, getAllOrgs } = require('../src/config');
 // contenedor y de canal, así que no se acepta nada fuera de esto.
 const KEY_RE = /^[a-z][a-z0-9]{2,15}$/;
 const KEYS_RESERVADOS = new Set(['orderer', 'example', 'generated', 'all']);
+// La jurisdicción es clave de canal (canal-<jur>): minúsculas, dígitos y guiones.
+const JUR_RE = /^[a-z][a-z0-9-]{1,30}$/;
+
+function validarJurisdiccion(jur) {
+  if (jur === undefined || jur === null || String(jur).trim() === '') return '';
+  const j = String(jur).trim();
+  if (!JUR_RE.test(j)) {
+    throw new Error('jurisdicción inválida: minúsculas, dígitos y guiones (p.ej. caba, buenos-aires)');
+  }
+  return j;
+}
 
 function validarKey(key) {
   if (typeof key !== 'string' || !KEY_RE.test(key)) {
@@ -113,14 +124,17 @@ async function conExclusion(descripcion, fn) {
 // addClinic da de alta una clínica de verdad: MSP nuevo, peer nuevo y
 // actualización de config de canal-nacional firmada por las existentes.
 // Tarda ~40 s, así que va emitiendo el progreso por SSE.
-async function addClinic({ key, nombre }, broadcast) {
+async function addClinic({ key, nombre, jurisdiccion }, broadcast) {
   const k = validarKey(key);
   const n = validarTexto(nombre, 'nombre', 60);
+  // La jurisdicción es opcional: sin ella la clínica queda sólo en el canal
+  // nacional. Con ella, addOrg.sh la suma al canal provincial (que debe existir).
+  const j = validarJurisdiccion(jurisdiccion);
 
   return conExclusion(`alta de ${k}`, async () => {
     broadcast?.({ type: 'clinic-op', op: 'alta', key: k, estado: 'en-curso', linea: `Dando de alta ${n}…` });
     try {
-      await runNetworkScript('addOrg.sh', [k, n], (linea) =>
+      await runNetworkScript('addOrg.sh', j ? [k, n, j] : [k, n], (linea) =>
         broadcast?.({ type: 'clinic-op', op: 'alta', key: k, estado: 'en-curso', linea }),
       );
     } catch (err) {
