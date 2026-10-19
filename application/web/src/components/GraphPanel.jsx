@@ -7,18 +7,23 @@
 // El layout NO se anima: se calcula entero y se pinta ya acomodado. Ver el
 // grafo sacudirse hasta encontrar su lugar no aporta y se ve mal.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RUTA_MAPA, irA, orgByMsp, rutaActivo, useFetch } from '../api.js';
+import { RUTA_MAPA, irA, nombreJurisdiccion, orgByMsp, rutaActivo, useFetch } from '../api.js';
 import Dropdown from './Dropdown.jsx';
+import Icon from './Icon.jsx';
 import { TIPOS, acomodar, construirGrafo } from '../grafo.js';
 
-// El lienzo arranca bajo —el grafo comparte la solapa con el ABM, que va abajo,
-// y un mapa alto empuja los formularios fuera de la pantalla— pero crece con la
-// cantidad de nodos: con 30 y pico apretados en 440 px los rótulos se pisan.
-// En pantalla completa el SVG se estira y recupera todo el alto igual.
-const W = 1120;
+// El viewBox se hace del tamaño real del lienzo, medido: una unidad del dibujo
+// es un píxel en pantalla. Con un ancho fijo el mapa se achicaba hasta ser
+// ilegible en un celular y se agrandaba en pantalla completa, con rótulos de
+// tamaños distintos según dónde se mirara. El alto arranca bajo y crece con la
+// cantidad de nodos (con 30 y pico apretados en 440 px los rótulos se pisan);
+// en pantalla completa es el de la ventana.
+const W_INICIAL = 1120;
+const W_MIN = 320;
 const H_MIN = 440;
 const H_MAX = 900;
-const altoPara = (nodos) => Math.min(H_MAX, Math.max(H_MIN, 300 + nodos * 13));
+const altoPara = (nodos, ancho) =>
+  Math.min(H_MAX, Math.max(H_MIN, 300 + nodos * 13 * Math.max(1, 700 / ancho)));
 
 // Distancia del centro del nodo a su borde en la dirección dada. El activo se
 // dibuja como rectángulo, así que un radio fijo dejaría la punta de la flecha
@@ -49,8 +54,26 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
 
   const svgRef = useRef(null);
   const mundoRef = useRef(null);
+  const lienzoRef = useRef(null);
   const nodosRef = useRef([]);
+  // Con qué tamaño, y con qué datos, se calculó el layout que está a la vista.
+  const layoutRef = useRef({ W: 0, H: 0, completo: false });
   const arrastreRef = useRef(null);
+
+  const [tam, setTam] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = lienzoRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(([entrada]) => {
+      const w = Math.round(entrada.contentRect.width);
+      const h = Math.round(entrada.contentRect.height);
+      // Se ignoran variaciones de un par de píxeles (scrollbars, redondeos):
+      // cada cambio de tamaño reescala el dibujo.
+      setTam((t) => (Math.abs(t.w - w) < 4 && Math.abs(t.h - h) < 4 ? t : { w, h }));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const grafoFull = useMemo(
     () => construirGrafo({
@@ -78,36 +101,42 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
     return { nodos, aristas, capas: [capaActiva] };
   }, [grafoFull, capaActiva]);
 
-  // El alto crece con los nodos y además reserva una franja por capa, para que
-  // cada banda (nacional / provincial) tenga lugar propio.
-  const H = Math.max(altoPara(grafo.nodos.length), (grafo.capas?.length || 1) * 170);
+  const cargando = !assets || !consents || !logs;
+
+  // Ancho = el del lienzo. Alto: el de la ventana en pantalla completa; si no,
+  // crece con los nodos y reserva una franja por capa.
+  const W = Math.max(W_MIN, tam.w || W_INICIAL);
+  const H = soloMapa && tam.h > 0
+    ? Math.max(tam.h, 320)
+    : Math.max(altoPara(grafo.nodos.length, W), (grafo.capas?.length || 1) * 170);
 
   // El layout se resuelve completo antes de pintar. Las posiciones de los nodos
-  // que ya estaban se conservan: si no, emitir un activo reordenaría todo el
-  // grafo y se perdería la referencia visual.
+  // que ya estaban se conservan (llevadas al tamaño actual): si no, emitir un
+  // activo o girar el celular reordenaría todo el grafo y se perdería la
+  // referencia visual. Un layout hecho mientras los datos todavía cargaban no
+  // cuenta como referencia: eran las instituciones solas.
   useEffect(() => {
-    const previas = new Map(nodosRef.current.map((n) => [n.id, n]));
+    const prev = layoutRef.current;
+    const sx = prev.W ? W / prev.W : 1;
+    const sy = prev.H ? H / prev.H : 1;
+    const previas = prev.completo
+      ? new Map(nodosRef.current.map((n) => [n.id, { x: n.x * sx, y: n.y * sy, fijo: n.fijo }]))
+      : null;
     const nodos = grafo.nodos.map((n) => ({ ...n }));
-    acomodar(nodos, grafo.aristas, W, H, grafo.capas);
-    for (const n of nodos) {
-      const vieja = previas.get(n.id);
-      if (vieja) {
-        n.x = vieja.x;
-        n.y = vieja.y;
-        n.fijo = vieja.fijo;
-      }
-    }
+    acomodar(nodos, grafo.aristas, W, H, grafo.capas, previas);
     nodosRef.current = nodos;
+    layoutRef.current = { W, H, completo: !cargando };
     setFrame((f) => f + 1);
-  }, [grafo, H]);
+  }, [grafo, W, H, cargando]);
 
   const reacomodar = useCallback(() => {
     const nodos = grafo.nodos.map((n) => ({ ...n }));
     acomodar(nodos, grafo.aristas, W, H, grafo.capas);
     nodosRef.current = nodos;
+    layoutRef.current = { W, H, completo: !cargando };
     setVista({ x: 0, y: 0, k: 1 });
     setFrame((f) => f + 1);
-  }, [grafo, H]);
+  }, [grafo, W, H, cargando]);
 
 
   // Pantalla -> coordenadas del grafo. Se toma la matriz del grupo que lleva el
@@ -175,14 +204,13 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
   };
 
   const posiciones = new Map(nodosRef.current.map((n) => [n.id, n]));
-  const cargando = !assets || !consents || !logs;
 
   return (
     <section className={`panel ${soloMapa ? 'grafo-expandido' : ''}`}>
       <div className="panel-head">
         <div className="grafo-titulo">
           {soloMapa && (
-            <img className="brand-mark-sm" src="/favicon.svg" alt="Medambar" width="28" height="28" />
+            <img className="brand-mark-sm" src="/favicon.svg" alt="Medámbar" width="28" height="28" />
           )}
           <h2>Trazabilidad de los activos</h2>
         </div>
@@ -192,7 +220,7 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
             <Dropdown
               value={capaActiva}
               onChange={setCapaSel}
-              options={grafoFull.capas.map((c) => ({ value: c, label: c === 'nacional' ? 'Nacional' : c }))}
+              options={grafoFull.capas.map((c) => ({ value: c, label: nombreJurisdiccion(c) }))}
               ariaLabel="Capa de red"
             />
           </label>
@@ -200,7 +228,7 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
       </div>
 
       <div className="grafo-layout">
-        <div className="grafo-lienzo">
+        <div className="grafo-lienzo" ref={lienzoRef}>
           {/* Solo iconos: el rótulo comía ancho del lienzo. Llevan title y
               aria-label porque un icono suelto no se lee ni con lector de
               pantalla ni de un vistazo la primera vez. */}
@@ -211,7 +239,7 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
               title="Reacomodar el grafo"
               aria-label="Reacomodar el grafo"
             >
-              ⟳
+              <Icon name="refresh" size={15} />
             </button>
             {/* El mismo icono en los dos sentidos: lleva al mapa a pantalla
                 completa y, estando en ella, vuelve a la solapa Red de datos. */}
@@ -222,7 +250,7 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
               title={soloMapa ? 'Volver a Red de datos' : 'Ver solo el mapa'}
               aria-label={soloMapa ? 'Volver a Red de datos' : 'Ver solo el mapa'}
             >
-              {soloMapa ? '⤡' : '⤢'}
+              <Icon name={soloMapa ? 'minimize' : 'maximize'} size={15} />
             </button>
           </div>
 
@@ -256,7 +284,7 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
                   <g key={`banda-${capa}`} className={`grafo-banda ${esNacional ? 'banda-nacional' : 'banda-provincial'}`}>
                     <rect x="0" y={top} width={W} height={bandH} />
                     <text x="14" y={top + 20} className="grafo-banda-label">
-                      {esNacional ? 'Nacional · canal-nacional' : `Provincia ${capa} · canal-${capa}`}
+                      {esNacional ? 'Nacional · canal-nacional' : `${nombreJurisdiccion(capa)} · canal-${capa}`}
                     </text>
                   </g>
                 );

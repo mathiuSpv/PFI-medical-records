@@ -125,48 +125,56 @@ export default function ActionsPanel({ clinics, onDone }) {
         <h2>Acciones</h2>
       </div>
 
-      <div className="tabs">
+      <div className="tabs" role="group" aria-label="Acción">
         {[['emitir', 'Emitir activo'], ['consentir', 'Consentimiento']].map(([key, label]) => (
-          <button key={key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => { setTab(key); setResult(null); }}>
+          <button
+            key={key}
+            className={`tab ${tab === key ? 'active' : ''}`}
+            aria-pressed={tab === key}
+            onClick={() => { setTab(key); setResult(null); }}
+          >
             {label}
           </button>
         ))}
       </div>
 
-      <div className="form">
-        <label>
-          {tab === 'emitir' ? 'Emite como' : 'Otorga'}
-          <Dropdown
-            value={org ?? ''}
-            onChange={setOrg}
-            options={clinics.map((c) => ({ value: c.key, label: c.label }))}
-            ariaLabel={tab === 'emitir' ? 'Emite como' : 'Otorga'}
-          />
-        </label>
-
-        <label>
-          Paciente
-          <input value={patientId} onChange={(e) => setPatientId(e.target.value)} />
-        </label>
-
-        <div className="renaper-check">
+      {/* Dos columnas en pantallas anchas: a la izquierda quién firma y sobre
+          qué paciente (común a las dos acciones), a la derecha lo propio de
+          cada una. En angosto se apilan en ese mismo orden. */}
+      <div className="acciones-grid">
+        <div className="form">
           <label>
-            Código RENAPER
-            <input value={dni} onChange={(e) => setDni(e.target.value)} placeholder="DNI, p.ej. 30111222" />
+            {tab === 'emitir' ? 'Emite como' : 'Otorga'}
+            <Dropdown
+              value={org ?? ''}
+              onChange={setOrg}
+              options={clinics.map((c) => ({ value: c.key, label: c.label }))}
+              ariaLabel={tab === 'emitir' ? 'Emite como' : 'Otorga'}
+            />
           </label>
-          <button disabled={renaperBusy || !dni.trim()} onClick={validarIdentidad}>
-            {renaperBusy ? 'Validando…' : 'Validar identidad'}
-          </button>
+
+          <label>
+            Paciente
+            <input value={patientId} onChange={(e) => setPatientId(e.target.value)} spellCheck="false" />
+          </label>
+
+          <div className="renaper-check">
+            <label>
+              Código RENAPER
+              <input value={dni} onChange={(e) => setDni(e.target.value)} placeholder="DNI, p.ej. 30111222" inputMode="numeric" />
+            </label>
+            <button disabled={renaperBusy || !dni.trim()} onClick={validarIdentidad}>
+              {renaperBusy ? 'Validando…' : 'Validar identidad'}
+            </button>
+          </div>
           {renaper?.found && (
-            <span className="badge permit">
+            <span className="badge permit badge-linea">
               {renaper.persona.nombre} {renaper.persona.apellido} · DNI {renaper.dni}
             </span>
           )}
-          {renaper && !renaper.found && <span className="badge deny">no encontrado en RENAPER</span>}
-        </div>
+          {renaper && !renaper.found && <span className="badge deny badge-linea">no encontrado en RENAPER</span>}
 
-        {tab === 'emitir' && (
-          <>
+          {tab === 'emitir' && (
             <label>
               Tipo de recurso FHIR
               <Dropdown
@@ -176,45 +184,57 @@ export default function ActionsPanel({ clinics, onDone }) {
                 ariaLabel="Tipo de recurso FHIR"
               />
             </label>
-            <label>
-              Recurso
-              <textarea rows="8" value={resourceJSON} onChange={(e) => setResourceJSON(e.target.value)} spellCheck="false" />
-            </label>
-            <button className="primary" disabled={busy} onClick={emitir}>Cifrar, subir a IPFS y emitir</button>
-          </>
-        )}
+          )}
+        </div>
 
-        {tab === 'consentir' && (
-          <>
-            <label>
-              Otorgar a
-              <Dropdown
-                value={targetKey ?? ''}
-                onChange={setTargetKey}
-                options={destinatarias.map((c) => ({ value: c.key, label: c.label }))}
-                ariaLabel="Otorgar a"
-              />
-            </label>
-            <div className="checkboxes">
-              {RESOURCE_TYPES.map((t) => (
-                <label key={t} className="checkbox">
-                  <input type="checkbox" checked={grantTypes.includes(t)} onChange={() => toggleType(t)} />
-                  {t}
-                </label>
-              ))}
-            </div>
-            <label>
-              Vencimiento
-              <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
-            </label>
-            <div className="btn-row">
-              <button className="primary" disabled={busy || !other || grantTypes.length === 0} onClick={otorgar}>Otorgar consentimiento</button>
-              <button disabled={busy || !other || grantTypes.length === 0} onClick={() => revocar(false)}>Revocar seleccionados</button>
-              <button className="danger" disabled={busy || !other} onClick={() => revocar(true)}>Revocar todo</button>
-            </div>
-          </>
-        )}
+        <div className="form">
+          {tab === 'emitir' && (
+            <>
+              <label>
+                Recurso
+                <textarea rows="13" value={resourceJSON} onChange={(e) => setResourceJSON(e.target.value)} spellCheck="false" />
+              </label>
+              <button className="primary" disabled={busy} onClick={emitir}>
+                {busy ? 'Emitiendo…' : 'Cifrar, subir a IPFS y emitir'}
+              </button>
+            </>
+          )}
 
+          {tab === 'consentir' && (
+            <>
+              <label>
+                Otorgar a
+                <Dropdown
+                  value={targetKey ?? ''}
+                  onChange={setTargetKey}
+                  options={destinatarias.map((c) => ({ value: c.key, label: c.label }))}
+                  ariaLabel="Otorgar a"
+                />
+              </label>
+              <fieldset className="checkboxes">
+                <legend className="field-label">Tipos de recurso</legend>
+                {RESOURCE_TYPES.map((t) => (
+                  <label key={t} className="checkbox">
+                    <input type="checkbox" checked={grantTypes.includes(t)} onChange={() => toggleType(t)} />
+                    {t}
+                  </label>
+                ))}
+              </fieldset>
+              <label>
+                Vencimiento
+                <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+              </label>
+              <div className="btn-row">
+                <button className="primary" disabled={busy || !other || grantTypes.length === 0} onClick={otorgar}>Otorgar consentimiento</button>
+                <button disabled={busy || !other || grantTypes.length === 0} onClick={() => revocar(false)}>Revocar seleccionados</button>
+                <button className="danger" disabled={busy || !other} onClick={() => revocar(true)}>Revocar todo</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="form acciones-resultado" aria-live="polite">
         {busy && <div className="result pending">Enviando transacción…</div>}
         {result && !result.ok && <div className="result error"><strong>{result.label}</strong>: {result.error}</div>}
         {result?.ok && (

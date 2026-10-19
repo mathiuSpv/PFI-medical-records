@@ -1,6 +1,6 @@
 // Tabla de activos emitidos en canal-nacional (metadatos públicos: el
 // payload clínico está cifrado en IPFS).
-import { orgByMsp, shortHash, useFetch } from '../api.js';
+import { fmtFecha, orgByMsp, rutaActivo, shortHash, useFetch } from '../api.js';
 
 export default function AssetsPanel({ tick }) {
   const { data: assets, error } = useFetch('/assets', { deps: [tick] });
@@ -20,16 +20,19 @@ export default function AssetsPanel({ tick }) {
             const owner = orgByMsp(a.OwnerOrg);
             return (
               <tr key={a.FhirResourceID}>
-                <td><code>{a.FhirResourceID}</code></td>
+                <td><a className="enlace-activo" href={rutaActivo(a.FhirResourceID)}><code>{a.FhirResourceID}</code></a></td>
                 <td>{a.ResourceType}</td>
                 <td><code title={a.IpfsCid}>{shortHash(a.IpfsCid, 14)}</code></td>
                 <td><code title={a.PatientIDHash}>{shortHash(a.PatientIDHash)}</code></td>
                 <td><span className="org-badge" style={{ color: owner.color }}>{owner.label}</span></td>
-                <td className="muted">{a.Timestamp}</td>
+                <td className="muted" title={a.Timestamp}>{fmtFecha(a.Timestamp)}</td>
               </tr>
             );
           })}
-          {assets?.length === 0 && <tr><td colSpan="6" className="empty">Sin activos.</td></tr>}
+          {!assets && !error && <tr><td colSpan="6" className="empty">Leyendo el ledger…</td></tr>}
+          {assets?.length === 0 && (
+            <tr><td colSpan="6" className="empty">Todavía no se emitió ningún activo: se emiten desde Operación › Acciones.</td></tr>
+          )}
         </tbody>
       </table>
     </section>

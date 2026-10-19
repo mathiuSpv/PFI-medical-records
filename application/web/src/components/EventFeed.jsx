@@ -5,6 +5,7 @@
 // blob de IPFS y devuelve el recurso FHIR en claro — el círculo completo.
 import { useState } from 'react';
 import { api, fmtTs, orgByMsp, shortHash } from '../api.js';
+import Icon from './Icon.jsx';
 
 function DeliveryCard({ delivery }) {
   const [decrypted, setDecrypted] = useState(null);
@@ -29,12 +30,14 @@ function DeliveryCard({ delivery }) {
   return (
     <div className="feed-item delivery">
       <div className="feed-title">
-        🔑 Entrega de clave <span className="muted">(simulada)</span>
+        <Icon name="key" className="feed-icono" /> Entrega de clave <span className="muted">(simulada)</span>
       </div>
       <div className="feed-body">
-        <span className="org-badge" style={{ color: from.color }}>{from.label}</span>
-        {' → '}
-        <span className="org-badge" style={{ color: to.color }}>{to.label}</span>
+        <div className="ruta-orgs">
+          <span className="org-badge" style={{ color: from.color }}>{from.label}</span>
+          <Icon name="arrow-right" size={14} className="muted" />
+          <span className="org-badge" style={{ color: to.color }}>{to.label}</span>
+        </div>
         <div className="muted">{delivery.resourceType} · <code>{delivery.fhirResourceID}</code></div>
         <details>
           <summary>Sobre (ECDH P-256 + HKDF + AES-256-GCM)</summary>
@@ -67,8 +70,14 @@ export default function EventFeed({ feed, soloEntregas = false }) {
         <h2>{soloEntregas ? 'Entregas de clave' : 'Eventos en vivo'}</h2>
         <span className="hint">{soloEntregas ? 'ECDH P-256 + HKDF + AES-256-GCM' : 'SSE · canal-nacional'}</span>
       </div>
-      <div className="feed">
-        {items.length === 0 && <div className="empty">{soloEntregas ? 'Sin entregas de clave todavía.' : 'Sin eventos.'}</div>}
+      <div className={`feed ${soloEntregas ? 'feed-grilla' : ''}`}>
+        {items.length === 0 && (
+          <div className="empty">
+            {soloEntregas
+              ? 'Sin entregas de clave todavía: aparecen cuando un pedido de acceso recibe PERMIT.'
+              : 'Sin eventos.'}
+          </div>
+        )}
         {items.map((item, i) => {
           if (item.type === 'key-delivery') {
             return <DeliveryCard key={item.delivery.id} delivery={item.delivery} />;
@@ -82,7 +91,7 @@ export default function EventFeed({ feed, soloEntregas = false }) {
             return (
               <div className="feed-item" key={`${item.txId}-${i}`}>
                 <div className="feed-title">
-                  {alta ? '🏥' : '🚪'} {item.eventName} <span className="muted">{fmtTs(item.receivedAt)}</span>
+                  <Icon name={alta ? 'building' : 'log-out'} className="feed-icono" /> {item.eventName} <span className="muted">{fmtTs(item.receivedAt)}</span>
                 </div>
                 <div className="feed-body">
                   <span className="org-badge" style={{ color: orgByMsp(item.mspId).color }}>
@@ -102,7 +111,7 @@ export default function EventFeed({ feed, soloEntregas = false }) {
           const req = orgByMsp(item.requesterOrg);
           return (
             <div className="feed-item" key={`${item.txId}-${i}`}>
-              <div className="feed-title">⚡ {item.eventName} <span className="muted">{fmtTs(item.receivedAt)}</span></div>
+              <div className="feed-title"><Icon name="zap" className="feed-icono" /> {item.eventName} <span className="muted">{fmtTs(item.receivedAt)}</span></div>
               <div className="feed-body">
                 <span className="org-badge" style={{ color: req.color }}>{req.label}</span>
                 {' obtuvo PERMIT sobre '}<code>{item.fhirResourceID}</code>

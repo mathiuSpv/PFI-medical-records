@@ -10,7 +10,7 @@
 // on-chain— porque pueden discrepar, y esa discrepancia es justamente lo que
 // hay que poder ver (p.ej. una clínica en el canal pero sin registrar).
 import { useState } from 'react';
-import { api, useSSE } from '../api.js';
+import { api, nombreJurisdiccion, useSSE } from '../api.js';
 import Dropdown from './Dropdown.jsx';
 
 function EstadoBadge({ estado }) {
@@ -47,8 +47,9 @@ export default function ClinicsPanel({ clinics, onChanged }) {
     }
   };
 
-  // Sólo se ofrecen jurisdicciones que YA tienen canal provincial (una clínica
-  // activa en ellas): el prototipo no crea canales nuevos (ver addOrg.sh).
+  // Se ofrecen las jurisdicciones que ya tienen canal provincial (alguna clínica
+  // activa en ellas). Una jurisdicción nueva —que addOrg.sh sí sabe crear, con
+  // su canal— se da de alta por la API; el formulario no la ofrece.
   const jurisdicciones = [...new Set(
     (clinics ?? []).filter((c) => c.activa && c.jurisdiccion).map((c) => c.jurisdiccion),
   )];
@@ -105,7 +106,7 @@ export default function ClinicsPanel({ clinics, onChanged }) {
               <td className="cell-actions">
                 {c.activa && (
                   <button
-                    className="danger"
+                    className="danger small"
                     disabled={!!busy || activas < 2}
                     title={activas < 2 ? 'No se puede dar de baja la última clínica activa' : undefined}
                     onClick={() => baja(c)}
@@ -119,6 +120,7 @@ export default function ClinicsPanel({ clinics, onChanged }) {
         </tbody>
       </table>
 
+      <h3 className="subtitulo">Nueva institución</h3>
       <div className="clinic-form">
         <label>
           Identificador
@@ -138,7 +140,10 @@ export default function ClinicsPanel({ clinics, onChanged }) {
           <Dropdown
             value={jurisdiccion}
             onChange={setJurisdiccion}
-            options={[{ value: '', label: '— sólo nacional —' }, ...jurisdicciones.map((j) => ({ value: j, label: j }))]}
+            options={[
+              { value: '', label: 'Sólo canal nacional' },
+              ...jurisdicciones.map((j) => ({ value: j, label: nombreJurisdiccion(j) })),
+            ]}
             ariaLabel="Jurisdicción"
           />
         </label>

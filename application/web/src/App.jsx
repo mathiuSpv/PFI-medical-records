@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RUTA_MAPA, api, idDeRuta, irA, useClinics, useRuta, useSSE } from './api.js';
+import { RUTA_MAPA, api, idDeRuta, useClinics, useRuta, useSSE } from './api.js';
 import ActionsPanel from './components/ActionsPanel.jsx';
 import ClinicsPanel from './components/ClinicsPanel.jsx';
 import AssetsPanel from './components/AssetsPanel.jsx';
@@ -8,6 +8,7 @@ import AccessLogPanel from './components/AccessLogPanel.jsx';
 import EventFeed from './components/EventFeed.jsx';
 import GraphPanel from './components/GraphPanel.jsx';
 import AssetPage from './components/AssetPage.jsx';
+import Icon from './components/Icon.jsx';
 
 // Sub-módulos de la solapa Operación: cada uno es su propio panel, separados en
 // sub-solapas para no apilar los cinco en una columna que obliga a scrollear.
@@ -43,7 +44,7 @@ export default function App() {
   const ruta = useRuta();
   const activoId = idDeRuta(ruta);
   const soloMapa = ruta === RUTA_MAPA;
-  const solapa = ruta === '/red' ? 'red' : 'operacion';
+  const solapa = activoId ? null : ruta === '/red' ? 'red' : 'operacion';
   const subModRuta = ruta.startsWith('/operacion/') ? ruta.slice('/operacion/'.length) : '';
   const subOp = SUBMODULOS.some(([id]) => id === subModRuta) ? subModRuta : 'instituciones';
 
@@ -85,58 +86,57 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="brand">
-          <img className="brand-mark" src="/favicon.svg" alt="Medambar" width="40" height="40" />
-          <div>
-            <h1 className="wordmark">Med<span className="accent">amb</span>ar</h1>
-          </div>
+          <img className="brand-mark" src="/favicon.svg" alt="Medámbar" width="40" height="40" />
+          <h1 className="wordmark">Med<span className="accent">ámbar</span></h1>
         </div>
+        {/* Dos vistas de lo mismo: operar el bus, o mirar lo que quedó registrado
+            como grafo. Viven en la barra para estar a mano desde cualquier
+            vista, incluida la página de un activo. Son enlaces (cada vista
+            tiene su URL), así que se marca la actual con aria-current. */}
+        <nav className="solapas" aria-label="Vistas">
+          {/* Operación: al pasar el cursor (o enfocar) despliega sus módulos. */}
+          <div
+            className="solapa-wrap"
+            onMouseEnter={() => { if (opTimer.current) { clearTimeout(opTimer.current); opTimer.current = null; } }}
+            onMouseLeave={() => { opTimer.current = setTimeout(() => setOpMenu(false), 1000); }}
+          >
+            <button
+              aria-haspopup="true"
+              aria-expanded={opMenu}
+              aria-current={solapa === 'operacion' ? 'page' : undefined}
+              className={`solapa ${solapa === 'operacion' ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setOpMenu((o) => !o); }}
+            >
+              Operación
+              <Icon name="chevron-down" size={15} className={`solapa-caret ${opMenu ? 'abierto' : ''}`} />
+            </button>
+            <div className={`submenu ${opMenu ? 'open' : ''}`}>
+              {SUBMODULOS.map(([id, etiqueta]) => (
+                <a
+                  key={id}
+                  href={`#/operacion/${id}`}
+                  aria-current={solapa === 'operacion' && subOp === id ? 'page' : undefined}
+                  className={`submenu-item ${solapa === 'operacion' && subOp === id ? 'active' : ''}`}
+                  onClick={() => setOpMenu(false)}
+                >
+                  {etiqueta}
+                </a>
+              ))}
+            </div>
+          </div>
+          <a
+            href="#/red"
+            aria-current={solapa === 'red' ? 'page' : undefined}
+            className={`solapa ${solapa === 'red' ? 'active' : ''}`}
+            onClick={() => setOpMenu(false)}
+          >
+            Red de datos
+          </a>
+        </nav>
       </header>
 
       {activoId ? <AssetPage id={activoId} tick={tick} activas={activas} onDone={bump} /> : (
       <>
-      {/* Dos vistas de lo mismo: operar el bus, o mirar lo que quedó registrado
-          como grafo. La segunda va a ancho completo y sin el feed, porque el
-          lienzo necesita todo el espacio disponible. */}
-      <nav className="solapas" role="tablist" aria-label="Vistas">
-        {/* Operación: al pasar el cursor (o enfocar) despliega sus módulos. */}
-        <div
-          className="solapa-wrap"
-          onMouseEnter={() => { if (opTimer.current) { clearTimeout(opTimer.current); opTimer.current = null; } }}
-          onMouseLeave={() => { opTimer.current = setTimeout(() => setOpMenu(false), 1000); }}
-        >
-          <button
-            role="tab"
-            aria-selected={solapa === 'operacion'}
-            aria-haspopup="menu"
-            aria-expanded={opMenu}
-            className={`solapa ${solapa === 'operacion' ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setOpMenu((o) => !o); }}
-          >
-            Operación ▾
-          </button>
-          <div className={`submenu ${opMenu ? 'open' : ''}`} role="menu">
-            {SUBMODULOS.map(([id, etiqueta]) => (
-              <button
-                key={id}
-                role="menuitem"
-                className={`submenu-item ${solapa === 'operacion' && subOp === id ? 'active' : ''}`}
-                onClick={() => { irA(`/operacion/${id}`); setOpMenu(false); }}
-              >
-                {etiqueta}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          role="tab"
-          aria-selected={solapa === 'red'}
-          className={`solapa ${solapa === 'red' ? 'active' : ''}`}
-          onClick={() => { irA('/red'); setOpMenu(false); }}
-        >
-          Red de datos
-        </button>
-      </nav>
-
       {solapa === 'operacion' ? (
         <div className="main-col">
             {/* El módulo activo se elige en el flyout de la solapa Operación. */}
