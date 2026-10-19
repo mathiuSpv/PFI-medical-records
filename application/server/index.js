@@ -7,6 +7,7 @@
 const express = require('express');
 const buildRoutes = require('./routes');
 const { startEventListener } = require('./listener');
+const { loadState, auditIntegrity } = require('./keys');
 
 const PORT = process.env.PORT || 3001;
 
@@ -47,8 +48,31 @@ setInterval(() => {
 // por SSE mientras corren.
 app.use('/api', buildRoutes(broadcast));
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`[server] BFF escuchando en http://localhost:${PORT}`);
   console.log('[server] Requiere red Fabric + IPFS arriba (network/network.sh up|createChannels|deployCC|ipfsUp)');
+  try {
+    const s = await loadState();
+    console.log(`[server] keystore restaurado: ${s.keys} claves, ${s.deliveries} entregas`);
+  } catch (err) {
+    console.error('[server] no se pudo restaurar el keystore:', err.message);
+  }
   void startEventListener(broadcast);
+
+  // Auditoría periódica de integridad (opt-in por env, en ms): barre todos los
+  // activos y avisa por consola si alguno no coincide con su CID anclado. Apagada
+  // por defecto para no pegarle a IPFS sin pedirlo.
+  const auditMs = Number(process.env.PFI_AUDIT_INTERVAL_MS || 0);
+  if (auditMs > 0) {
+    console.log(`[server] auditoría de integridad periódica cada ${auditMs} ms`);
+    setInterval(async () => {
+      try {
+        const r = await auditIntegrity();
+        if (r.failed.length) console.error(`[audit] integridad: ${r.failed.length}/${r.checked} FALLARON`, r.failed);
+        else console.log(`[audit] integridad OK (${r.checked} activos)`);
+      } catch (err) {
+        console.error('[audit] no se pudo correr la auditoría:', err.message);
+      }
+    }, auditMs).unref();
+  }
 });
