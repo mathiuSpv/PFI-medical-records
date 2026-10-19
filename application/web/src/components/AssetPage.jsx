@@ -101,7 +101,7 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
   const entradas = consentimientos.length + accesos.length;
 
   const volver = (
-    <button className="chip" onClick={() => irA('/')}>← volver al mapa</button>
+    <button className="chip" onClick={() => irA('/red')}>← volver al mapa</button>
   );
 
   if (assets && !activo) {

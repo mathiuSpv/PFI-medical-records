@@ -213,14 +213,14 @@ export default function GraphPanel({ clinics, tick, soloMapa = false }) {
             >
               ⟳
             </button>
-            {/* El mismo icono en los dos sentidos: lleva a la vista dedicada
-                del mapa y, estando en ella, vuelve al dashboard. */}
+            {/* El mismo icono en los dos sentidos: lleva al mapa a pantalla
+                completa y, estando en ella, vuelve a la solapa Red de datos. */}
             <button
               className={`chip chip-icono ${soloMapa ? 'active' : ''}`}
-              onClick={() => irA(soloMapa ? '/' : RUTA_MAPA)}
+              onClick={() => irA(soloMapa ? '/red' : RUTA_MAPA)}
               aria-pressed={soloMapa}
-              title={soloMapa ? 'Volver al dashboard' : 'Ver solo el mapa'}
-              aria-label={soloMapa ? 'Volver al dashboard' : 'Ver solo el mapa'}
+              title={soloMapa ? 'Volver a Red de datos' : 'Ver solo el mapa'}
+              aria-label={soloMapa ? 'Volver a Red de datos' : 'Ver solo el mapa'}
             >
               {soloMapa ? '⤡' : '⤢'}
             </button>
