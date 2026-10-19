@@ -12,17 +12,20 @@
 import { useEffect, useState } from 'react';
 import { api, irA, orgByMsp, useFetch } from '../api.js';
 
-function Bloque({ txId }) {
+function Bloque({ txId, channel }) {
   const [estado, setEstado] = useState({ cargando: true });
 
   useEffect(() => {
     let vivo = true;
     setEstado({ cargando: true });
-    api(`/blocks/by-tx/${txId}`)
+    // El acceso puede haber quedado en un canal provincial o en el nacional: el
+    // canal viene del access-log y se pasa para que qscc mire el canal correcto.
+    const qs = channel ? `?channel=${encodeURIComponent(channel)}` : '';
+    api(`/blocks/by-tx/${txId}${qs}`)
       .then((datos) => { if (vivo) setEstado({ datos }); })
       .catch((err) => { if (vivo) setEstado({ error: err.message }); });
     return () => { vivo = false; };
-  }, [txId]);
+  }, [txId, channel]);
 
   if (estado.cargando) return <div className="bloque bloque-pendiente">Buscando el bloque…</div>;
   if (estado.error) {
@@ -311,7 +314,7 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
                 </div>
                 {l.Reason && <div className="muted">{l.Reason}</div>}
                 <div className="muted">tx <code className="hash">{l.TxID}</code></div>
-                <Bloque txId={l.TxID} />
+                <Bloque txId={l.TxID} channel={l._channel} />
               </li>
             );
           })}

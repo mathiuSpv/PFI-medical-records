@@ -11,6 +11,7 @@ const express = require('express');
 
 const { evaluateJSON, defaultOrgKey } = require('./connections');
 const actions = require('./actions');
+const readmodel = require('./readmodel');
 const blocks = require('./blocks');
 const clinics = require('./clinics');
 const health = require('./health');
@@ -51,9 +52,12 @@ module.exports = function buildRoutes(broadcast) {
   router.get('/clinics/:mspId/history', wrap((req) =>
     evaluateJSON(orgOrDefault(req), 'GetClinicHistory', req.params.mspId)));
 
-  router.get('/assets', wrap((req) => evaluateJSON(orgOrDefault(req), 'GetAllAssets')));
-  router.get('/consents', wrap((req) => evaluateJSON(orgOrDefault(req), 'GetAllConsents')));
-  router.get('/access-logs', wrap((req) => evaluateJSON(orgOrDefault(req), 'GetAllAccessLogs')));
+  // Lecturas agregadas: unen el canal nacional con cada provincial y de-duplican
+  // (readmodel.js), porque con la topología jerárquica el índice ya no vive en
+  // un solo canal. Cada ítem trae _channel con su canal de origen.
+  router.get('/assets', wrap(() => readmodel.allAssets()));
+  router.get('/consents', wrap(() => readmodel.allConsents()));
+  router.get('/access-logs', wrap(() => readmodel.allAccessLogs()));
   router.get('/consents/history', wrap((req) => {
     const { patientIDHash, grantedToOrg } = req.query;
     return evaluateJSON(orgOrDefault(req), 'GetConsentHistory', patientIDHash, grantedToOrg);
@@ -62,7 +66,7 @@ module.exports = function buildRoutes(broadcast) {
   // Cabecera del bloque que contiene una transacción: es lo que permite ver en
   // qué bloque quedó asentado un acceso, y no solo su TxID.
   router.get('/blocks/by-tx/:txId', wrap((req) =>
-    blocks.blockByTxId(orgOrDefault(req), req.params.txId)));
+    blocks.blockByTxId(orgOrDefault(req), req.params.txId, req.query.channel)));
 
   router.get('/deliveries', wrap(() => keys.deliveries));
 
@@ -79,6 +83,10 @@ module.exports = function buildRoutes(broadcast) {
   // ejercitar la propiedad sin tener que pasar por una entrega de clave.
   router.post('/assets/:id/verify-integrity', wrap((req) =>
     keys.verifyAssetIntegrity(req.params.id, orgOrDefault(req))));
+
+  // Auditoría de integridad de TODOS los activos (bajo demanda): recalcula el
+  // CID de cada blob y lo contrasta con el anclado en la cadena.
+  router.get('/integrity/audit', wrap(() => keys.auditIntegrity()));
 
   // Topología de canales por nivel: el tablero la usa para mostrar la
   // estructura federal de la red en lugar de una lista plana de canales.
