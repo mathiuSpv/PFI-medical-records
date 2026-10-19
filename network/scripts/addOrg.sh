@@ -77,13 +77,17 @@ fi
 # jurisdicción (firmarán la incorporación); KEY aún no está en el registro.
 PROV_MEMBERS=()
 PROV_CHANNEL=""
+CREAR_JUR=false
 if [ -n "${JURISDICCION}" ]; then
   if ! [[ "${JURISDICCION}" =~ ^[a-z][a-z0-9-]{1,30}$ ]]; then
     fatalln "jurisdicción inválida: '${JURISDICCION}' (minúsculas, dígitos y guiones)"
   fi
   PROV_CHANNEL="canal-${JURISDICCION}"
   mapfile -t PROV_MEMBERS < <(clinicsInJurisdiction "${JURISDICCION}" | tr ' ' '\n' | sed '/^$/d')
-  [ "${#PROV_MEMBERS[@]}" -ge 1 ] || fatalln "La jurisdicción '${JURISDICCION}' no tiene un canal provincial creado (sería la primera clínica). El prototipo sólo soporta sumarse a un canal provincial existente; crear uno nuevo queda para la topología dinámica."
+  # Sin miembros previos = es la PRIMERA clínica de la jurisdicción: hay que
+  # crear su canal provincial (create/join de un canal nuevo, dirección segura);
+  # con miembros, sólo se la suma al canal ya existente.
+  [ "${#PROV_MEMBERS[@]}" -ge 1 ] || CREAR_JUR=true
 fi
 
 # --- Identificadores derivados -----------------------------------------------
@@ -146,7 +150,11 @@ registryAdd "${KEY}" "${NOMBRE}" "${MSPID}" "${DOMAIN}" \
   "${PRIVATE_CHANNEL}" "${CHANNEL_PROFILE}" "${GEN_CONFIGTX}" "${COMPOSE_FILE}" "${JURISDICCION}"
 
 if [ -n "${JURISDICCION}" ]; then
-  infoln "   jurisdicción '${JURISDICCION}': se la unirá a '${PROV_CHANNEL}' al final del alta"
+  if [ "$CREAR_JUR" = true ]; then
+    infoln "   jurisdicción '${JURISDICCION}': se CREARÁ su canal '${PROV_CHANNEL}' al final (primera clínica)"
+  else
+    infoln "   jurisdicción '${JURISDICCION}': se la unirá a '${PROV_CHANNEL}' al final del alta"
+  fi
 fi
 
 # --- 4) Peer ------------------------------------------------------------------
@@ -268,6 +276,19 @@ fi
 # MIEMBROS (no por todas las activas: una org ajena no es firmante válido de ese
 # canal). Después el peer se une y aprueba el chaincode ya commiteado ahí.
 if [ -n "${JURISDICCION}" ]; then
+  if [ "$CREAR_JUR" = true ]; then
+    # Primera clínica de la jurisdicción: se CREA el canal provincial (reusa el
+    # profile generado del canal privado, un solo miembro) y se despliega el
+    # chaincode ahí. Es create/join de un canal nuevo —la vía segura, igual que
+    # el bootstrap y el canal privado—, no el remove+reuse que rompió en #5.
+    infoln "[jurisdicción] Creando el canal provincial '${PROV_CHANNEL}' (primera clínica: ${KEY})"
+    CONFIGTX_DIR="${GEN_CONFIGTX}" "${NETWORK_HOME}/scripts/createChannel.sh" "${PROV_CHANNEL}" "${CHANNEL_PROFILE}" "${KEY}"
+    infoln "[jurisdicción] Desplegando chaincode en '${PROV_CHANNEL}'"
+    # deployChaincode registra la clínica on-chain en el canal (cold start: la
+    # primera org se registra a sí misma).
+    "${NETWORK_HOME}/scripts/deployChaincode.sh" "${PROV_CHANNEL}" "${KEY}"
+    successln "${MSPID} creó y se unió a '${PROV_CHANNEL}'"
+  else
   infoln "[jurisdicción] Incorporando ${MSPID} a '${PROV_CHANNEL}' (firman sus miembros: ${PROV_MEMBERS[*]})"
   PROV_READER=${PROV_MEMBERS[0]}
   PBASE="${NETWORK_HOME}/channel-artifacts/add_${KEY}_${JURISDICCION}"
@@ -332,6 +353,7 @@ if [ -n "${JURISDICCION}" ]; then
     fi
   fi
   successln "${MSPID} unido a '${PROV_CHANNEL}'"
+  fi
 fi
 
 successln "== '${NOMBRE}' dada de alta =="
