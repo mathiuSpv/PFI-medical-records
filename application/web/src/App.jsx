@@ -87,7 +87,6 @@ export default function App() {
           <img className="brand-mark" src="/favicon.svg" alt="Medambar" width="40" height="40" />
           <div>
             <h1 className="wordmark">Med<span className="accent">amb</span>ar</h1>
-            <p className="subtitle">Panel de prueba · bus de interoperabilidad de activos médicos</p>
           </div>
         </div>
       </header>

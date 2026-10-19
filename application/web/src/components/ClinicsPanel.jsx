@@ -11,6 +11,7 @@
 // hay que poder ver (p.ej. una clínica en el canal pero sin registrar).
 import { useState } from 'react';
 import { api, useSSE } from '../api.js';
+import Dropdown from './Dropdown.jsx';
 
 function EstadoBadge({ estado }) {
   if (!estado) return <span className="badge warn">sin registro</span>;
@@ -134,10 +135,12 @@ export default function ClinicsPanel({ clinics, onChanged }) {
         </label>
         <label>
           Jurisdicción
-          <select value={jurisdiccion} onChange={(e) => setJurisdiccion(e.target.value)}>
-            <option value="">— sólo nacional —</option>
-            {jurisdicciones.map((j) => <option key={j} value={j}>{j}</option>)}
-          </select>
+          <Dropdown
+            value={jurisdiccion}
+            onChange={setJurisdiccion}
+            options={[{ value: '', label: '— sólo nacional —' }, ...jurisdicciones.map((j) => ({ value: j, label: j }))]}
+            ariaLabel="Jurisdicción"
+          />
         </label>
         <button className="primary" disabled={!!busy || !key.trim() || !nombre.trim()} onClick={alta}>
           Dar de alta
