@@ -105,6 +105,13 @@ const CONFORMES = [
     class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: 'AMB' },
     subject: { reference: 'Patient/p1' },
   }],
+  ['Observation con valueRange válido', 'Observation', {
+    resourceType: 'Observation',
+    status: 'final',
+    code: { coding: [{ system: 'http://loinc.org', code: '8867-4' }] },
+    subject: { reference: 'Patient/p1' },
+    valueRange: { low: { value: 5 }, high: { value: 10 } },
+  }],
 ];
 
 // Clona y aplica una mutación, para que cada caso parta de un recurso válido.
@@ -163,6 +170,10 @@ const NO_CONFORMES = [
   ['gender fuera del ValueSet', 'Patient', { resourceType: 'Patient', name: [{ family: 'X' }], gender: 'masculino' }, 'codigo-fuera-del-valueset'],
   ['Encounter status fuera del ValueSet', 'Encounter', { resourceType: 'Encounter', status: 'terminado', class: { code: 'AMB' }, subject: { reference: 'Patient/p1' } }, 'codigo-fuera-del-valueset'],
   ['Encounter sin subject', 'Encounter', { resourceType: 'Encounter', status: 'finished', class: { code: 'AMB' } }, 'elemento-obligatorio-ausente'],
+
+  // Dominio de valores: UCUM y rangos
+  ['valueQuantity declara UCUM sin code', 'Observation', mutar(observacionValida, { valueQuantity: { value: 118, system: 'http://unitsofmeasure.org' } }), 'quantity-ucum-sin-code'],
+  ['valueRange con low mayor que high', 'Observation', mutar(observacionValida, { valueQuantity: undefined, valueRange: { low: { value: 10 }, high: { value: 5 } } }), 'range-invertido'],
 ];
 
 // --- Pruebas ----------------------------------------------------------------
