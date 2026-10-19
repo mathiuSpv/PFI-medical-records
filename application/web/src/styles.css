@@ -12,26 +12,39 @@
    los "muted" de 11-12 px y los placeholders, que es donde este tipo de paleta
    clara suele fallar. */
 :root {
-  --bg: #f4f8fc;        /* página y lienzo de la topología */
-  --panel: #ffffff;     /* tarjetas: blanco puro sobre el celeste de fondo */
-  --panel-2: #e9f1f9;   /* superficies embebidas: feed, filas de historial, bandas de canal */
-  --border: #dbe7f2;    /* divisiones y bordes de tarjeta (decorativos) */
-  --line: #b3cbe0;      /* trazos del diagrama: conectores y cajas de nodo */
+  /* Identidad Medambar: los neutros tintan al azul de marca, el navy manda en
+     los textos y el color saturado se reparte en tres roles — azul (acción /
+     institución 1), teal (institución 2 / PERMIT) y ámbar (acento de marca,
+     solo en relleno). Las proporciones de contraste anotadas abajo se
+     recalcularon para esta paleta; el ámbar NUNCA va como texto (2.2:1). */
+  --bg: #eef3f8;        /* página y lienzo de la topología (tinte Medambar) */
+  --panel: #ffffff;     /* tarjetas: blanco puro sobre el tinte de fondo */
+  --panel-2: #e7eef6;   /* superficies embebidas: feed, filas de historial, bandas de canal */
+  --border: #dde4ea;    /* divisiones y bordes de tarjeta (decorativos) */
+  --line: #aec3d6;      /* trazos del diagrama: conectores y cajas de nodo */
   --control: #70899f;   /* borde de inputs y botones: 3.6:1 sobre blanco, que es
                            lo que pide WCAG 1.4.11 para el límite de un control.
                            Un hairline más suave se ve más "prolijo" y es
                            justamente el error típico de las paletas claras. */
-  --text: #14293d;
-  --muted: #566f85;     /* 5.2:1 sobre blanco, 4.6:1 sobre --panel-2 */
-  --accent: #1668c4;    /* acción primaria, foco, selección */
-  --accent-strong: #0f56a8;
-  --org1: #1668c4;        /* institución fundadora 1 (Clínica Genérica 1) */
-  --org2: #0f7551;        /* institución fundadora 2 — Clínica Genérica 2 (5.0:1 también sobre --panel-2) */
-  --permit: #0f7551;
+  --text: #12365c;      /* navy Medambar: 12.3:1 sobre blanco */
+  --muted: #566f85;     /* 5.2:1 sobre blanco, 4.5:1 sobre --panel-2 */
+  --accent: #1c6aa6;    /* azul Medambar — acción primaria, foco, selección (5.7:1) */
+  --accent-strong: #164a74; /* navy 2 — hover / estado fuerte (9.3:1) */
+  --org1: #1c6aa6;        /* institución fundadora 1 (Clínica Genérica 1) — azul */
+  --org2: #0a6e68;        /* institución fundadora 2 — Clínica Genérica 2 — teal oscuro (6.1:1) */
+  --permit: #0a6e68;      /* teal Medambar: unifica el estado favorable con la marca */
   --deny: #c0203c;
   --warn: #8a5a06;
-  --shadow: 0 1px 2px rgba(20, 41, 61, 0.05), 0 2px 8px rgba(20, 41, 61, 0.04);
+  /* Ámbar de marca: solo relleno / acentos (bandas, realces), nunca texto. */
+  --amber: #e9a23b;
+  --amber-strong: #cf8514;
+  --amber-tint: #fbedd4;
+  --teal-tint: #e4f1f0;
+  --shadow: 0 1px 2px rgba(18, 54, 92, 0.06), 0 2px 8px rgba(18, 54, 92, 0.05);
   --mono: ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, monospace;
+  /* Tipografía del deck: Cambria en títulos, Calibri en el cuerpo. */
+  --head: Cambria, 'Gill Sans', Georgia, serif;
+  --body: Calibri, 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -40,8 +53,11 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 14px/1.5 var(--body);
 }
+
+/* Títulos en Cambria (el deck): el cuerpo queda en Calibri. */
+h1, h2, h3, .panel h2, .grafo-props h3 { font-family: var(--head); letter-spacing: 0.01em; }
 
 .app { max-width: 1500px; margin: 0 auto; padding: 20px; }
 
@@ -56,9 +72,26 @@ body {
 ::placeholder { color: var(--muted); opacity: 1; }
 
 /* ---- header ---- */
-.header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
-.header h1 { margin: 0; font-size: 20px; }
-.subtitle { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+/* Cabecera de marca Medambar: banda navy con el acento ámbar al pie (la firma
+   del deck). El wordmark lleva un sello con la inicial; el color de marca se usa
+   acá como identidad, no como decoración suelta. */
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 12px; margin: -20px -20px 18px; padding: 16px 20px;
+  background: linear-gradient(180deg, var(--text) 0%, #0e2b49 100%);
+  border-bottom: 3px solid var(--amber);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark {
+  width: 40px; height: 40px; flex: none; display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+.grafo-titulo { display: flex; align-items: center; gap: 10px; }
+.brand-mark-sm { flex: none; display: block; }
+.header h1 { margin: 0; font-size: 20px; color: #fff; }
+.wordmark { font-weight: 700; }
+.wordmark .accent { color: var(--amber); }
+.subtitle { margin: 2px 0 0; color: #b9cde0; font-size: 13px; font-family: var(--body); }
 .header-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---- layout ---- */
@@ -83,7 +116,7 @@ body {
 .chip.active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 
 /* ---- tabs y formularios ---- */
-.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .tab {
   background: none; border: 1px solid var(--control); color: var(--muted);
   border-radius: 8px; padding: 6px 12px; cursor: pointer;
@@ -98,6 +131,46 @@ body {
   border-radius: 8px; padding: 8px 10px; font: inherit;
 }
 .form textarea { font-family: var(--mono); font-size: 12px; }
+
+/* Inputs Medambar: fondo blanco como las tarjetas, borde de control (3.6:1,
+   WCAG 1.4.11), radio 10px, una sombra de profundidad muy suave en reposo y, al
+   foco, el borde azul de marca + anillo. El outline de teclado lo sigue
+   poniendo :focus-visible; el anillo y la sombra son el pulido visual. */
+.form input, .form select, .form textarea,
+.clinic-form input, .clinic-form select, .acciones-activo select {
+  background: #fff; color: var(--text);
+  border: 1px solid var(--control); border-radius: 10px;
+  padding: 10px 12px; font-size: 13.5px; line-height: 1.4;
+  box-shadow: inset 0 1px 2px rgba(18, 54, 92, 0.05);
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out;
+}
+.form input:hover, .form select:hover, .form textarea:hover,
+.clinic-form input:hover, .clinic-form select:hover, .acciones-activo select:hover {
+  border-color: var(--accent); background-color: #fcfdff;
+}
+.form input:focus, .form select:focus, .form textarea:focus,
+.clinic-form input:focus, .clinic-form select:focus, .acciones-activo select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(28, 106, 166, 0.16), inset 0 1px 2px rgba(18, 54, 92, 0.04);
+  background-color: #fff;
+}
+
+/* Selects Medambar: se reemplaza la flecha nativa (inconsistente entre
+   navegadores) por un caret propio navy; appearance:none la saca y el
+   background-image la dibuja, con padding a la derecha para no pisar el texto. */
+.form select, .clinic-form select, .acciones-activo select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2312365c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 15px;
+  padding-right: 34px;
+  cursor: pointer;
+}
+/* Labels de formulario: más prolijos, con jerarquía de marca. */
+.form label, .field-label, .clinic-form label {
+  font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em; color: var(--muted);
+}
 .renaper-check { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
 .renaper-check label { flex: 1; min-width: 160px; }
 .checkboxes { display: flex; gap: 14px; flex-wrap: wrap; }
@@ -119,11 +192,11 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 
 /* ---- resultados ---- */
 .result { border-radius: 8px; padding: 10px 12px; font-size: 13px; }
-.result.ok { background: #e4f4ec; border: 1px solid var(--permit); color: #0e6647; }
+.result.ok { background: var(--teal-tint); border: 1px solid var(--permit); color: var(--permit); }
 .result.error { background: #fbe6ea; border: 1px solid var(--deny); color: #9e162f; }
 .result.pending { color: var(--muted); }
 .result.decision { font-size: 26px; font-weight: 800; text-align: center; padding: 16px; }
-.result.decision.permit { color: #0e6647; background: #e4f4ec; border: 1px solid var(--permit); }
+.result.decision.permit { color: var(--permit); background: var(--teal-tint); border: 1px solid var(--permit); }
 .result.decision.deny { color: #9e162f; background: #fbe6ea; border: 1px solid var(--deny); }
 .result.decision .reason { font-size: 14px; font-weight: 400; display: block; margin-top: 4px; }
 .error-text { color: var(--deny); font-size: 12px; }
@@ -138,7 +211,7 @@ code { font-family: var(--mono); font-size: 12px; }
 .empty { color: var(--muted); font-style: italic; text-align: center; padding: 14px !important; }
 .org-badge { font-weight: 600; white-space: nowrap; }
 .badge { border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-.badge.permit { color: #0e6647; background: #d7f0e4; }
+.badge.permit { color: var(--permit); background: #d4e9e6; }
 .badge.deny { color: #9e162f; background: #fbdde3; }
 .badge.warn { color: #7a4f05; background: #faeccc; }
 .history-row td { background: var(--panel-2); }
@@ -148,7 +221,7 @@ code { font-family: var(--mono); font-size: 12px; }
 .feed-panel { max-height: calc(100vh - 60px); display: flex; flex-direction: column; }
 .feed { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .feed-item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
-.feed-item.delivery { border-color: #9cc2ea; }
+.feed-item.delivery { border-color: var(--amber); border-left-width: 3px; background: var(--amber-tint); }
 .feed-title { font-weight: 700; margin-bottom: 4px; }
 .feed-body { display: flex; flex-direction: column; gap: 4px; }
 .feed details { margin-top: 4px; }
@@ -193,7 +266,7 @@ code { font-family: var(--mono); font-size: 12px; }
 .op-log li.error { color: var(--deny); font-weight: 600; }
 
 /* ---- solapas de nivel superior ---- */
-.solapas { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.solapas { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
 .solapa {
   background: none; border: none; border-bottom: 2px solid transparent;
   color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 16px;
@@ -202,6 +275,43 @@ code { font-family: var(--mono); font-size: 12px; }
 }
 .solapa:hover { color: var(--text); }
 .solapa.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Flyout de módulos de Operación: aparece al pasar el cursor (o al enfocar, para
+   teclado/tap) sobre la solapa Operación, en vez de ocupar una fila fija. */
+.solapa-wrap { position: relative; }
+.submenu {
+  position: absolute; top: 100%; left: 0; z-index: 30;
+  display: none; flex-direction: column; min-width: 190px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 6px; margin-top: 2px;
+}
+.solapa-wrap:hover .submenu, .solapa-wrap:focus-within .submenu { display: flex; }
+.submenu-item {
+  background: none; border: none; text-align: left; padding: 8px 12px;
+  border-radius: 8px; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer;
+  transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+.submenu-item:hover { background: var(--panel-2); color: var(--text); }
+.submenu-item.active { color: var(--accent); background: var(--tint); }
+
+/* Selector de capa de red, debajo de las Referencias del grafo. */
+.grafo-capa-sel {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-top: 14px; font-size: 12.5px; font-weight: 600;
+  letter-spacing: 0.01em; color: var(--muted);
+}
+.grafo-capa-sel select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-color: #fff; color: var(--text);
+  border: 1px solid var(--control); border-radius: 10px;
+  padding: 9px 34px 9px 12px; font-size: 13.5px; cursor: pointer;
+  box-shadow: inset 0 1px 2px rgba(18, 54, 92, 0.05);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2312365c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; background-size: 15px;
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.grafo-capa-sel select:hover { border-color: var(--accent); }
+.grafo-capa-sel select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(28, 106, 166, 0.16); }
 
 /* ---- grafo de datos ---- */
 /* Dos colores nuevos, y solo dos: el resto de los nodos toma el color de su
@@ -225,6 +335,19 @@ code { font-family: var(--mono); font-size: 12px; }
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; line-height: 1;
 }
+/* Bandas por capa de la topología (nacional / provincial): franjas de fondo
+   que separan los niveles. No capturan el puntero para no estorbar el
+   arrastre del lienzo ni de los nodos. */
+.grafo-banda rect { pointer-events: none; stroke: var(--border); stroke-width: 1; }
+.grafo-banda-label {
+  pointer-events: none; font-family: var(--head); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.banda-nacional rect { fill: #eef3f8; }
+.banda-nacional .grafo-banda-label { fill: var(--text); }
+.banda-provincial rect { fill: #eef7f4; }
+.banda-provincial .grafo-banda-label { fill: var(--permit); }
+
 .grafo {
   width: 100%; height: auto; display: block;
   background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
@@ -304,13 +427,13 @@ code { font-family: var(--mono); font-size: 12px; }
 }
 .grafo-expandido .grafo-layout {
   display: flex; flex-direction: column; grid-template-columns: none;
-  flex: 1; min-height: 0;
+  flex: 1; min-height: 0; width: 100%;
 }
 /* En pantalla completa el SVG se saca del flujo. Con width:100% y height:auto
    su alto lo fija el aspect ratio del viewBox, que en una pantalla ancha da mas
    alto que la pantalla y estira la pagina entera en vez de ajustarse al marco.
    Posicionado absoluto llena el hueco que le deja el flex y nunca lo impone. */
-.grafo-expandido .grafo-lienzo { flex: 1; min-height: 0; overflow: hidden; }
+.grafo-expandido .grafo-lienzo { flex: 1; min-height: 0; width: 100%; overflow: hidden; }
 .grafo-expandido .grafo { position: absolute; inset: 0; width: 100%; height: 100%; }
 .grafo-expandido .grafo-props { max-height: 32vh; overflow-y: auto; }
 /* Con el panel abajo hay ancho de sobra: las referencias van en fila en vez de
@@ -354,6 +477,20 @@ code { font-family: var(--mono); font-size: 12px; }
 .props { margin: 8px 0 12px; display: flex; flex-direction: column; gap: 8px; }
 .props dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
 .props dd { margin: 2px 0 0; font-size: 13px; word-break: break-word; }
+
+/* Responsive: en pantallas chicas se achican los espacios y las tablas (que no
+   se pueden comprimir más sin volverse ilegibles) scrollean en horizontal
+   dentro de su panel en vez de desbordar la página. */
+@media (max-width: 640px) {
+  .app { padding: 12px 16px; }
+  .header { margin: -12px -16px 16px; padding: 14px 16px; }
+  .panel { padding: 12px; overflow-x: auto; }
+  table { font-size: 12px; }
+  th, td { padding: 5px 6px; }
+  .header h1 { font-size: 18px; }
+  .subtitle { font-size: 12px; }
+  .brand-mark { width: 34px; height: 34px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

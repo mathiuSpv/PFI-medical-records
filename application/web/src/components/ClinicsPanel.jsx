@@ -21,6 +21,7 @@ function EstadoBadge({ estado }) {
 export default function ClinicsPanel({ clinics, onChanged }) {
   const [key, setKey] = useState('');
   const [nombre, setNombre] = useState('');
+  const [jurisdiccion, setJurisdiccion] = useState('');
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [progreso, setProgreso] = useState([]);
@@ -45,10 +46,21 @@ export default function ClinicsPanel({ clinics, onChanged }) {
     }
   };
 
+  // Sólo se ofrecen jurisdicciones que YA tienen canal provincial (una clínica
+  // activa en ellas): el prototipo no crea canales nuevos (ver addOrg.sh).
+  const jurisdicciones = [...new Set(
+    (clinics ?? []).filter((c) => c.activa && c.jurisdiccion).map((c) => c.jurisdiccion),
+  )];
+
   const alta = () => correr(`alta:${key}`, async () => {
-    await api('/clinics', { key: key.trim(), nombre: nombre.trim() });
+    await api('/clinics', {
+      key: key.trim(),
+      nombre: nombre.trim(),
+      jurisdiccion: jurisdiccion || undefined,
+    });
     setKey('');
     setNombre('');
+    setJurisdiccion('');
   });
 
   // El motivo lo pone el backend por default: la baja se decide con el botón y
@@ -80,7 +92,6 @@ export default function ClinicsPanel({ clinics, onChanged }) {
             <tr key={c.key} className={c.activa ? undefined : 'row-muted'}>
               <td>
                 <span className="org-badge" style={{ color: c.color }}>{c.label}</span>
-                {c.fundadora && <span className="hint"> · fundadora</span>}
               </td>
               <td><code>{c.mspId}</code></td>
               <td><code>{c.peerEndpoint?.split(':')[1]}</code></td>
@@ -120,6 +131,13 @@ export default function ClinicsPanel({ clinics, onChanged }) {
         <label>
           Nombre de la institución
           <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="p.ej. Hospital Rosario" />
+        </label>
+        <label>
+          Jurisdicción
+          <select value={jurisdiccion} onChange={(e) => setJurisdiccion(e.target.value)}>
+            <option value="">— sólo nacional —</option>
+            {jurisdicciones.map((j) => <option key={j} value={j}>{j}</option>)}
+          </select>
         </label>
         <button className="primary" disabled={!!busy || !key.trim() || !nombre.trim()} onClick={alta}>
           Dar de alta

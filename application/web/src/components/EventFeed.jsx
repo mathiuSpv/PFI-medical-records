@@ -57,16 +57,19 @@ function DeliveryCard({ delivery }) {
   );
 }
 
-export default function EventFeed({ feed }) {
+export default function EventFeed({ feed, soloEntregas = false }) {
+  // Vista "Entregas": solo las tarjetas de entrega de clave (con el botón
+  // Descifrar). Sin el flag, el feed completo (accesos + altas/bajas + entregas).
+  const items = soloEntregas ? feed.filter((f) => f.type === 'key-delivery') : feed;
   return (
     <section className="panel feed-panel">
       <div className="panel-head">
-        <h2>Eventos en vivo</h2>
-        <span className="hint">SSE · canal-nacional</span>
+        <h2>{soloEntregas ? 'Entregas de clave' : 'Eventos en vivo'}</h2>
+        <span className="hint">{soloEntregas ? 'ECDH P-256 + HKDF + AES-256-GCM' : 'SSE · canal-nacional'}</span>
       </div>
       <div className="feed">
-        {feed.length === 0 && <div className="empty">Sin eventos.</div>}
-        {feed.map((item, i) => {
+        {items.length === 0 && <div className="empty">{soloEntregas ? 'Sin entregas de clave todavía.' : 'Sin eventos.'}</div>}
+        {items.map((item, i) => {
           if (item.type === 'key-delivery') {
             return <DeliveryCard key={item.delivery.id} delivery={item.delivery} />;
           }

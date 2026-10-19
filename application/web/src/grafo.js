@@ -54,6 +54,10 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
     nodos.set(idOrg(c.mspId), {
       id: idOrg(c.mspId),
       tipo: 'org',
+      // Capas a las que pertenece: toda institución es miembro del canal
+      // nacional, y además del de su provincia si tiene una. Un nodo puede
+      // verse en más de una capa.
+      capas: ['nacional', ...(c.jurisdiccion ? [c.jurisdiccion] : [])],
       etiqueta: c.label ?? c.nombre ?? c.mspId,
       color: c.color,
       baja: c.estado !== 'activa',
@@ -70,9 +74,19 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
 
   for (const a of assets ?? []) {
     pacientePorActivo.set(a.FhirResourceID, a.PatientIDHash);
+    // El activo vive en su canal de ORIGEN (su provincia), y además en el
+    // nacional si ascendió (se publicó su referencia allí, _channel nacional)
+    // o si nació nacional.
+    const origen = (!a.OriginChannel || a.OriginChannel === 'canal-nacional')
+      ? 'nacional'
+      : a.OriginChannel.replace(/^canal-/, '');
+    const capasActivo = origen === 'nacional'
+      ? ['nacional']
+      : (a._channel === 'canal-nacional' ? [origen, 'nacional'] : [origen]);
     nodos.set(idAct(a.FhirResourceID), {
       id: idAct(a.FhirResourceID),
       tipo: 'activo',
+      capas: capasActivo,
       etiqueta: a.FhirResourceID,
       subtipo: a.ResourceType,
       props: {
@@ -81,7 +95,7 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
         'CID en IPFS': a.IpfsCid,
         'Emitido por': nombreOrg(a.OwnerOrg),
         Emitido: fecha(a.Timestamp),
-        Contenido: 'cifrado AES-256-GCM, fuera del ledger',
+        Contenido: 'AES-256-GCM en IPFS (off-chain); la cadena solo ancla el CID',
       },
     });
 
@@ -160,7 +174,14 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
     a.detalle = n === 0 ? 'sin accesos' : `${n} acceso${n > 1 ? 's' : ''}${rechazadas ? ` · ${rechazadas} denegado${rechazadas > 1 ? 's' : ''}` : ''}`;
   }
 
-  return { nodos: [...nodos.values()], aristas };
+  // capas = niveles presentes (unión de las capas de cada nodo), nacional
+  // primero y provincias alfabéticas. Es la lista que ofrece el selector.
+  const presentes = new Set();
+  for (const n of nodos.values()) for (const c of n.capas) presentes.add(c);
+  const provincias = [...presentes].filter((c) => c !== 'nacional').sort();
+  const capas = [...(presentes.has('nacional') ? ['nacional'] : []), ...provincias];
+
+  return { nodos: [...nodos.values()], aristas, capas };
 }
 
 // ---------------------------------------------------------------------------
@@ -182,20 +203,37 @@ const TEMP_MINIMA = 0.0015;
 
 // Posiciones iniciales en círculo y no al azar: el layout converge parecido en
 // cada corrida, así que volver a abrir la solapa no reordena todo el grafo.
-export function posicionesIniciales(nodos, ancho, alto) {
-  const cx = ancho / 2;
-  const cy = alto / 2;
-  const radio = Math.min(ancho, alto) * 0.34;
-  nodos.forEach((n, i) => {
-    const ang = (2 * Math.PI * i) / Math.max(nodos.length, 1);
-    n.x = cx + radio * Math.cos(ang);
-    n.y = cy + radio * Math.sin(ang);
-    // Margen propio de cada nodo: acotar por el radio dejaba los rótulos
-    // colgando fuera del lienzo, porque el texto es bastante más ancho que el
-    // círculo. ~5.9 px por carácter a 11 px de fuente, la mitad para cada lado.
-    n.margenX = Math.max(TIPOS[n.tipo].radio, (String(n.etiqueta ?? '').length * 5.9) / 2) + 4;
-    n.margenY = TIPOS[n.tipo].radio + (n.subtipo ? 31 : 19);
-  });
+export function posicionesIniciales(nodos, ancho, alto, capas = []) {
+  const bandas = capas.length || 1;
+  const bandH = alto / bandas;
+  const idxDe = new Map(capas.map((c, i) => [c, i]));
+
+  // Cada nodo cae en la banda de su capa; se reparte en X dentro de ella y
+  // arranca en el centro vertical de la banda. bandTop/bandBot acotan su
+  // movimiento vertical (dejando arriba lugar para el rótulo de la banda).
+  const porBanda = new Map();
+  for (const n of nodos) {
+    const b = idxDe.get(n.capa) ?? 0;
+    if (!porBanda.has(b)) porBanda.set(b, []);
+    porBanda.get(b).push(n);
+  }
+  for (const [b, grupo] of porBanda) {
+    const top = b * bandH;
+    grupo.forEach((n, i) => {
+      const r = TIPOS[n.tipo].radio;
+      n.bandTop = top + r + 28;
+      n.bandBot = top + bandH - (r + (n.subtipo ? 31 : 19));
+      if (n.bandBot < n.bandTop) n.bandBot = n.bandTop;
+      n.bandY = (n.bandTop + n.bandBot) / 2;
+      n.x = ancho * ((i + 1) / (grupo.length + 1));
+      n.y = n.bandY;
+      // Margen propio de cada nodo: acotar por el radio dejaba los rótulos
+      // colgando fuera del lienzo, porque el texto es bastante más ancho que el
+      // círculo. ~5.9 px por carácter a 11 px de fuente, la mitad para cada lado.
+      n.margenX = Math.max(r, (String(n.etiqueta ?? '').length * 5.9) / 2) + 4;
+      n.margenY = r + (n.subtipo ? 31 : 19);
+    });
+  }
   return TEMP_INICIAL;
 }
 
@@ -247,11 +285,14 @@ export function tick(nodos, aristas, temp, ancho, alto) {
     b.dx += ux; b.dy += uy;
   }
 
+  // Gravedad: en X hacia el centro (mantiene el grafo centrado); en Y hacia el
+  // centro de SU banda, con fuerza mayor, para que cada capa quede separada en
+  // su franja en vez de mezclarse con las otras.
   const cx = ancho / 2;
-  const cy = alto / 2;
   for (const nd of nodos) {
+    const by = nd.bandY ?? alto / 2;
     nd.dx += (cx - nd.x) * 0.012 * k;
-    nd.dy += (cy - nd.y) * 0.012 * k;
+    nd.dy += (by - nd.y) * 0.09 * k;
   }
 
   const limite = Math.max(ancho, alto) * temp;
@@ -270,7 +311,11 @@ export function tick(nodos, aristas, temp, ancho, alto) {
     const margenX = nd.margenX ?? TIPOS[nd.tipo].radio + 8;
     const margenY = nd.margenY ?? TIPOS[nd.tipo].radio + 8;
     nd.x = Math.max(margenX, Math.min(ancho - margenX, nd.x));
-    nd.y = Math.max(TIPOS[nd.tipo].radio + 6, Math.min(alto - margenY, nd.y));
+    // Vertical: acotado a SU banda, no al lienzo entero, para que no se escape
+    // a la franja de otra capa.
+    const bt = nd.bandTop ?? (TIPOS[nd.tipo].radio + 6);
+    const bb = nd.bandBot ?? (alto - margenY);
+    nd.y = Math.max(bt, Math.min(bb, nd.y));
   }
 
   // Si el movimiento total ya es despreciable, se corta antes de agotar el
@@ -287,8 +332,8 @@ export const estaQuieto = (temp) => temp <= TEMP_MINIMA;
 // durante un par de segundos hasta encontrar su lugar no aporta nada y se ve
 // mal. Con las magnitudes de este prototipo el cálculo completo tarda menos que
 // un frame, así que el usuario ve el resultado directamente.
-export function acomodar(nodos, aristas, ancho, alto, maxTicks = 600) {
-  let temp = posicionesIniciales(nodos, ancho, alto);
+export function acomodar(nodos, aristas, ancho, alto, capas = [], maxTicks = 600) {
+  let temp = posicionesIniciales(nodos, ancho, alto, capas);
   for (let i = 0; i < maxTicks && !estaQuieto(temp); i++) {
     temp = tick(nodos, aristas, temp, ancho, alto);
   }
