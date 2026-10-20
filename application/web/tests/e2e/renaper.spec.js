@@ -4,8 +4,9 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Validación de identidad (RENAPER simulado)', () => {
+  // El widget vive en el módulo Acciones; '/' abre Instituciones.
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#/operacion/acciones');
     await expect(page.getByRole('heading', { name: 'Acciones' })).toBeVisible();
   });
 

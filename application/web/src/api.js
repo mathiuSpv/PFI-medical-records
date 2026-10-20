@@ -13,10 +13,11 @@ const COLOR_FIJOS = {
   generica1: 'var(--org1)',
   generica2: 'var(--org2)',
 };
-// Tonos medios, no pasteles: estos colores se usan como texto (el nombre de la
-// institución en tablas y feed) sobre fondo blanco, así que todos tienen que
-// pasar 4.5:1. Se evitan el azul y el verde de los dos colores fijos.
-const PALETA = ['#7b3fc4', '#a04a12', '#b3336b', '#0f6f86', '#5d4bbf', '#7a5c00'];
+// Tonos claros: estos colores se usan como texto (el nombre de la institución
+// en tablas y feed) sobre los paneles oscuros, así que todos tienen que pasar
+// 4.5:1 sobre --panel. Se evitan el azul y el teal de los dos colores fijos y
+// el ámbar de marca, que es el de la acción primaria.
+const PALETA = ['#c39bff', '#ff9e64', '#ff85bd', '#5fd3ea', '#a9a4ff', '#d7e36a'];
 
 export function colorFor(key) {
   if (COLOR_FIJOS[key]) return COLOR_FIJOS[key];
@@ -117,11 +118,24 @@ export function useSSE(onMessage) {
 // sumar un router al proyecto: la URL queda compartible, el botón atrás del
 // navegador funciona y recargar mantiene la vista, que es todo lo que se
 // necesita de un router acá.
+// rutaPrevia: de dónde se llegó a la vista actual. La ficha de un activo se abre
+// desde el mapa, la tabla de Activos o la Auditoría, y "volver" tiene que llevar
+// a ese lugar y no siempre al mapa.
+let rutaPrevia = null;
+export const rutaAnterior = () => rutaPrevia;
+
 export function useRuta() {
   const [ruta, setRuta] = useState(() => window.location.hash.slice(1) || '/');
 
   useEffect(() => {
-    const alCambiar = () => setRuta(window.location.hash.slice(1) || '/');
+    const alCambiar = (e) => {
+      try {
+        rutaPrevia = new URL(e.oldURL).hash.slice(1) || '/';
+      } catch {
+        rutaPrevia = null;
+      }
+      setRuta(window.location.hash.slice(1) || '/');
+    };
     window.addEventListener('hashchange', alCambiar);
     return () => window.removeEventListener('hashchange', alCambiar);
   }, []);
@@ -151,3 +165,42 @@ export function idDeRuta(ruta) {
 
 export const shortHash = (h, n = 10) => (h ? `${h.slice(0, n)}…` : '');
 export const fmtTs = (ts) => (ts ? new Date(ts).toLocaleTimeString('es-AR') : '');
+
+// Fechas del ledger: llegan en ISO UTC. Se muestran en hora local con un solo
+// formato en toda la consola (dd/mm/aaaa hh:mm:ss); el valor ISO original queda
+// en el title de quien lo muestre, que es el que sirve para auditar.
+const FMT_FECHA = new Intl.DateTimeFormat('es-AR', {
+  day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+});
+export function fmtFecha(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? String(iso) : FMT_FECHA.format(d).replace(',', '');
+}
+// Vencimientos: se fijan como fecha (aaaa-mm-dd, 23:59:59 UTC) y se muestran
+// como fecha, sin pasar a hora local para no correr el día.
+export function fmtDia(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '—';
+}
+
+// Jurisdicciones: el identificador es un slug (caba, santa-fe) porque es parte
+// del nombre del canal; para mostrarlo se usa el nombre propio.
+const JURISDICCIONES = {
+  caba: 'CABA',
+  cordoba: 'Córdoba',
+  'entre-rios': 'Entre Ríos',
+  neuquen: 'Neuquén',
+  'rio-negro': 'Río Negro',
+  tucuman: 'Tucumán',
+};
+const MENORES = new Set(['de', 'del', 'la', 'las', 'los', 'y']);
+export function nombreJurisdiccion(slug) {
+  if (!slug) return '';
+  if (slug === 'nacional') return 'Nacional';
+  if (JURISDICCIONES[slug]) return JURISDICCIONES[slug];
+  return slug.split('-')
+    .map((w, i) => (i > 0 && MENORES.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ');
+}

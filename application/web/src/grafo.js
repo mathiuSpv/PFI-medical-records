@@ -15,6 +15,8 @@
 // conviene leer de una sola vez. El paciente y el CID de IPFS, por lo mismo,
 // son propiedades y no nodos.
 
+import { fmtDia, fmtFecha } from './api.js';
+
 // ---------------------------------------------------------------------------
 // Construcción
 // ---------------------------------------------------------------------------
@@ -34,7 +36,6 @@ function estadoConsentimiento(c) {
   return 'vigente';
 }
 
-const fecha = (iso) => (iso ? String(iso).replace('T', ' ').replace('Z', '') : '—');
 
 // construirGrafo arma el grafo desde las cuatro fuentes del BFF. Tolera que
 // cualquiera venga null (todavía cargando) devolviendo lo que se pueda.
@@ -93,7 +94,7 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
         Paciente: a.PatientIDHash,
         'CID en IPFS': a.IpfsCid,
         'Emitido por': nombreOrg(a.OwnerOrg),
-        Emitido: fecha(a.Timestamp),
+        Emitido: fmtFecha(a.Timestamp),
         Contenido: 'AES-256-GCM en IPFS (off-chain); la cadena solo ancla el CID',
       },
     });
@@ -110,7 +111,7 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
           'Tipo FHIR': a.ResourceType,
           Paciente: a.PatientIDHash,
           'CID en IPFS': a.IpfsCid,
-          'Fecha de emisión': fecha(a.Timestamp),
+          'Fecha de emisión': fmtFecha(a.Timestamp),
         },
         // Lo carga el bloque de abajo, una vez agrupados los accesos.
         solicitudes: [],
@@ -157,7 +158,7 @@ export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg })
       resultado: ultima.decision,
       motivo: ultima.motivo || (ultima.decision === 'PERMIT' ? 'consentimiento vigente y alcanzando el tipo' : '—'),
       consentimiento: cons
-        ? `${estadoConsentimiento(cons)} · ${cons.ResourceTypes?.length ? cons.ResourceTypes.join(', ') : 'sin tipos'} · vence ${String(cons.Expiry).slice(0, 10)}`
+        ? `${estadoConsentimiento(cons)} · ${cons.ResourceTypes?.length ? cons.ResourceTypes.join(', ') : 'sin tipos'} · vence ${fmtDia(cons.Expiry)}`
         : 'no existe',
       resumen: `${evs.length} ${evs.length === 1 ? 'evaluación' : 'evaluaciones'} (${permits} PERMIT · ${evs.length - permits} DENY)`,
       evaluaciones: evs,
@@ -231,6 +232,9 @@ export function posicionesIniciales(nodos, ancho, alto, capas = []) {
       // círculo. ~5.9 px por carácter a 11 px de fuente, la mitad para cada lado.
       n.margenX = Math.max(r, (String(n.etiqueta ?? '').length * 5.9) / 2) + 4;
       n.margenY = r + (n.subtipo ? 31 : 19);
+      // Con una sola capa a la vista no hay franjas que separar: la gravedad
+      // vertical fuerte apilaba todos los nodos en una fila a media altura.
+      n.gravedadY = bandas === 1 ? 0.02 : 0.09;
     });
   }
   return TEMP_INICIAL;
@@ -291,13 +295,13 @@ export function tick(nodos, aristas, temp, ancho, alto) {
   for (const nd of nodos) {
     const by = nd.bandY ?? alto / 2;
     nd.dx += (cx - nd.x) * 0.012 * k;
-    nd.dy += (by - nd.y) * 0.09 * k;
+    nd.dy += (by - nd.y) * (nd.gravedadY ?? 0.09) * k;
   }
 
   const limite = Math.max(ancho, alto) * temp;
   let energia = 0;
   for (const nd of nodos) {
-    if (nd.fijo) continue;
+    if (nd.fijo || nd.anclado) continue;
     const d = Math.sqrt(nd.dx * nd.dx + nd.dy * nd.dy) || 0.01;
     const paso = Math.min(d, limite);
     const mx = (nd.dx / d) * paso;
@@ -325,16 +329,79 @@ export function tick(nodos, aristas, temp, ancho, alto) {
 
 export const estaQuieto = (temp) => temp <= TEMP_MINIMA;
 
+// separar resuelve las superposiciones que la simulación deja: las fuerzas
+// miran los centros, pero lo que se pisa son los rótulos, bastante más anchos
+// que el círculo. Cada nodo ocupa una caja (su ancho de rótulo × figura más
+// texto) y, mientras dos cajas se crucen, se empujan por el eje de menor
+// penetración. Lo que el usuario soltó a mano (fijo) no se mueve.
+function separar(nodos, ancho, alto) {
+  const caja = (n) => {
+    const r = TIPOS[n.tipo].radio;
+    return { x0: n.x - n.margenX, x1: n.x + n.margenX, y0: n.y - r - 4, y1: n.y + n.margenY };
+  };
+  const acotar = (n) => {
+    n.x = Math.max(n.margenX, Math.min(ancho - n.margenX, n.x));
+    n.y = Math.max(n.bandTop ?? 0, Math.min(n.bandBot ?? alto, n.y));
+  };
+  for (let vuelta = 0; vuelta < 80; vuelta++) {
+    let movio = false;
+    for (let i = 0; i < nodos.length; i++) {
+      for (let j = i + 1; j < nodos.length; j++) {
+        const a = nodos[i];
+        const b = nodos[j];
+        if (a.fijo && b.fijo) continue;
+        const ca = caja(a);
+        const cb = caja(b);
+        const px = Math.min(ca.x1, cb.x1) - Math.max(ca.x0, cb.x0);
+        const py = Math.min(ca.y1, cb.y1) - Math.max(ca.y0, cb.y0);
+        if (px <= 0 || py <= 0) continue;
+        movio = true;
+        // Se reparte el empujón entre los dos, salvo que uno esté fijo.
+        const fa = a.fijo ? 0 : b.fijo ? 1 : 0.5;
+        const fb = 1 - fa;
+        if (py < px) {
+          const s = a.y <= b.y ? -1 : 1;
+          a.y += s * (py + 2) * fa;
+          b.y -= s * (py + 2) * fb;
+        } else {
+          const s = a.x <= b.x ? -1 : 1;
+          a.x += s * (px + 2) * fa;
+          b.x -= s * (px + 2) * fb;
+        }
+        acotar(a);
+        acotar(b);
+      }
+    }
+    if (!movio) break;
+  }
+}
+
 // acomodar corre la simulación entera de una y devuelve los nodos ya ubicados.
 //
 // Se resolvió así en vez de animar la convergencia: ver el grafo sacudirse
 // durante un par de segundos hasta encontrar su lugar no aporta nada y se ve
 // mal. Con las magnitudes de este prototipo el cálculo completo tarda menos que
 // un frame, así que el usuario ve el resultado directamente.
-export function acomodar(nodos, aristas, ancho, alto, capas = [], maxTicks = 600) {
+//
+// previas (opcional): posiciones de un layout anterior, { id -> {x, y, fijo} },
+// ya llevadas a este ancho/alto. Esos nodos arrancan donde estaban y quedan
+// anclados durante la simulación: así un activo nuevo se acomoda alrededor de
+// lo que ya se veía en vez de que el resto del grafo se reordene, y sobre todo
+// sin caer encima de un nodo que conservó su lugar.
+export function acomodar(nodos, aristas, ancho, alto, capas = [], previas = null, maxTicks = 600) {
   let temp = posicionesIniciales(nodos, ancho, alto, capas);
+  for (const n of nodos) {
+    const vieja = previas?.get(n.id);
+    if (!vieja) continue;
+    n.x = vieja.x;
+    n.y = Math.max(n.bandTop, Math.min(n.bandBot, vieja.y));
+    n.fijo = vieja.fijo;
+    n.anclado = true;
+  }
   for (let i = 0; i < maxTicks && !estaQuieto(temp); i++) {
     temp = tick(nodos, aristas, temp, ancho, alto);
   }
+  separar(nodos, ancho, alto);
+  for (const n of nodos) delete n.anclado;
   return nodos;
 }

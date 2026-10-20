@@ -2,7 +2,7 @@
 // (GetHistoryForKey) expandible por fila — cada grant/revoke queda como una
 // versión separada e inmutable.
 import { useState } from 'react';
-import { api, orgByMsp, shortHash, useFetch } from '../api.js';
+import { api, fmtDia, fmtFecha, orgByMsp, shortHash, useFetch } from '../api.js';
 
 function estado(c) {
   if (c.Revoked) return { label: 'revocado', cls: 'deny' };
@@ -38,7 +38,7 @@ export default function ConsentsPanel({ tick }) {
       {error && <div className="result error">{error}</div>}
       <table>
         <thead>
-          <tr><th>Paciente (ref)</th><th>Otorgado por</th><th>Otorgado a</th><th>Resource types</th><th>Vence</th><th>Estado</th><th></th></tr>
+          <tr><th>Paciente (ref)</th><th>Otorgado por</th><th>Otorgado a</th><th>Tipos de recurso</th><th>Vence</th><th>Estado</th><th></th></tr>
         </thead>
         <tbody>
           {consents?.map((c) => {
@@ -52,9 +52,13 @@ export default function ConsentsPanel({ tick }) {
                 <td><span className="org-badge" style={{ color: by.color }}>{by.label}</span></td>
                 <td><span className="org-badge" style={{ color: to.color }}>{to.label}</span></td>
                 <td>{c.ResourceTypes.length ? c.ResourceTypes.join(', ') : '—'}</td>
-                <td className="muted">{c.Expiry.slice(0, 10)}</td>
+                <td className="muted" title={c.Expiry}>{fmtDia(c.Expiry)}</td>
                 <td><span className={`badge ${st.cls}`}>{st.label}</span></td>
-                <td><button className="link" onClick={() => toggleHistory(c)}>{openKey === key ? 'ocultar' : 'historial'}</button></td>
+                <td className="cell-actions">
+                  <button className="link" aria-expanded={openKey === key} onClick={() => toggleHistory(c)}>
+                    {openKey === key ? 'ocultar historial' : 'historial'}
+                  </button>
+                </td>
               </tr>,
               openKey === key && (
                 <tr key={`${key}-h`} className="history-row">
@@ -65,7 +69,7 @@ export default function ConsentsPanel({ tick }) {
                       <ol className="timeline">
                         {history.map((h) => (
                           <li key={h.TxID}>
-                            <span className="muted">{h.Timestamp}</span> — {h.Consent?.Revoked ? 'revocación' : 'otorgamiento'}:
+                            <span className="muted" title={h.Timestamp}>{fmtFecha(h.Timestamp)}</span> — {h.Consent?.Revoked ? 'revocación' : 'otorgamiento'}:
                             {' '}{h.Consent?.ResourceTypes?.length ? h.Consent.ResourceTypes.join(', ') : 'sin tipos vigentes'}
                             {' '}<code className="muted" title={h.TxID}>tx {shortHash(h.TxID, 8)}</code>
                           </li>
@@ -77,7 +81,10 @@ export default function ConsentsPanel({ tick }) {
               ),
             ];
           })}
-          {consents?.length === 0 && <tr><td colSpan="7" className="empty">Sin consentimientos.</td></tr>}
+          {!consents && !error && <tr><td colSpan="7" className="empty">Leyendo el ledger…</td></tr>}
+          {consents?.length === 0 && (
+            <tr><td colSpan="7" className="empty">Sin consentimientos: se otorgan desde Operación › Acciones o desde la ficha de un activo.</td></tr>
+          )}
         </tbody>
       </table>
     </section>

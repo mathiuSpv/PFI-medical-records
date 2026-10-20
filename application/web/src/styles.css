@@ -1,46 +1,55 @@
-/* Dashboard PFI — claro, sin frameworks. Blanco y celeste: el contexto de uso
-   es una oficina de clínica con luz de día, mostrando la pantalla a una
-   dirección médica o a un comité; el modo oscuro que había antes era del
-   desarrollo, no de ese escenario.
+/* Dashboard PFI — oscuro, sin frameworks. Fondo negro con un degradé que va
+   hacia el ámbar de marca (E6A817); la barra superior es clara, para que el
+   wordmark ("Med" negro + "ámbar" dorado) se lea como en el logo.
 
-   Estrategia de color contenida: los neutros están tintados hacia el celeste de
-   marca (no gris puro) y el color saturado se reserva para tres cosas —
-   identidad de cada institución, acción primaria y estado (PERMIT / DENY /
-   baja). Nada de color decorativo.
+   Estrategia de color contenida: los neutros están tintados hacia el ámbar (no
+   gris puro) y el color saturado se reserva para tres cosas — identidad de cada
+   institución, acción primaria y estado (PERMIT / DENY / baja).
 
-   Contraste: todos los colores de texto pasan 4.5:1 sobre su fondo, incluidos
-   los "muted" de 11-12 px y los placeholders, que es donde este tipo de paleta
-   clara suele fallar. */
+   Contraste: los colores de texto pasan 4.5:1 sobre --panel y --panel-2,
+   incluidos los "muted" de 11-12 px y los placeholders. Las proporciones
+   anotadas abajo están medidas (WCAG 2.x), no estimadas. */
 :root {
-  /* Identidad Medambar: los neutros tintan al azul de marca, el navy manda en
-     los textos y el color saturado se reparte en tres roles — azul (acción /
-     institución 1), teal (institución 2 / PERMIT) y ámbar (acento de marca,
-     solo en relleno). Las proporciones de contraste anotadas abajo se
-     recalcularon para esta paleta; el ámbar NUNCA va como texto (2.2:1). */
-  --bg: #eef3f8;        /* página y lienzo de la topología (tinte Medambar) */
-  --panel: #ffffff;     /* tarjetas: blanco puro sobre el tinte de fondo */
-  --panel-2: #e7eef6;   /* superficies embebidas: feed, filas de historial, bandas de canal */
-  --border: #dde4ea;    /* divisiones y bordes de tarjeta (decorativos) */
-  --line: #aec3d6;      /* trazos del diagrama: conectores y cajas de nodo */
-  --control: #70899f;   /* borde de inputs y botones: 3.6:1 sobre blanco, que es
-                           lo que pide WCAG 1.4.11 para el límite de un control.
-                           Un hairline más suave se ve más "prolijo" y es
-                           justamente el error típico de las paletas claras. */
-  --text: #12365c;      /* navy Medambar: 12.3:1 sobre blanco */
-  --muted: #566f85;     /* 5.2:1 sobre blanco, 4.5:1 sobre --panel-2 */
-  --accent: #1c6aa6;    /* azul Medambar — acción primaria, foco, selección (5.7:1) */
-  --accent-strong: #164a74; /* navy 2 — hover / estado fuerte (9.3:1) */
-  --org1: #1c6aa6;        /* institución fundadora 1 (Clínica Genérica 1) — azul */
-  --org2: #0a6e68;        /* institución fundadora 2 — Clínica Genérica 2 — teal oscuro (6.1:1) */
-  --permit: #0a6e68;      /* teal Medambar: unifica el estado favorable con la marca */
-  --deny: #c0203c;
-  --warn: #8a5a06;
-  /* Ámbar de marca: solo relleno / acentos (bandas, realces), nunca texto. */
-  --amber: #e9a23b;
-  --amber-strong: #cf8514;
-  --amber-tint: #fbedd4;
-  --teal-tint: #e4f1f0;
-  --shadow: 0 1px 2px rgba(18, 54, 92, 0.06), 0 2px 8px rgba(18, 54, 92, 0.05);
+  color-scheme: dark;
+  /* Ámbar Medambar (E6A817) como color principal; su complementario azul
+     (~222°) va a la institución 1 y a lo informativo, el teal al estado
+     favorable. Sobre fondo oscuro el ámbar sí puede ir como texto (8.8:1). */
+  --primary: #e6a817;
+  --primary-hover: #f2bd3e;
+  --primary-ink: #1a1200;  /* texto sobre relleno ámbar: 8.8:1 */
+  --complement: #8fb0ff;   /* azul complementario, versión clara para fondo oscuro */
+  --bg: #0b0a07;        /* lienzo de la topología y superficies hundidas */
+  --page: linear-gradient(165deg, #000 0%, #070604 38%, #2a1e04 72%, #5e440c 100%);
+  --panel: #15130e;     /* tarjetas */
+  --panel-2: #1e1b14;   /* superficies embebidas: feed, filas de historial, props */
+  --border: #2f2a1f;    /* divisiones y bordes de tarjeta (decorativos) */
+  --line: #6e6450;      /* trazos del diagrama: conectores y cajas de nodo */
+  --control: #7a6f58;   /* borde de inputs y botones: 3.7:1 sobre --panel (WCAG 1.4.11) */
+  --field: #0f0d09;     /* fondo de inputs y dropdowns */
+  --field-hover: #13110c;
+  --text: #f3ede0;      /* blanco cálido: 15.9:1 sobre --panel */
+  --muted: #ab9f86;     /* 7.1:1 sobre --panel, 6.6:1 sobre --panel-2 */
+  --accent: var(--primary);       /* acción primaria, foco, selección */
+  --accent-strong: var(--primary-hover);
+  --tint: rgba(230, 168, 23, 0.14); /* fondo de la opción activa */
+  --org1: var(--complement);   /* Clínica Genérica 1 — azul complementario */
+  --org2: #4fd1b5;             /* Clínica Genérica 2 — teal */
+  --permit: #4fd1b5;
+  --deny: #ff6b7a;
+  --warn: #f0b84a;
+  --amber: var(--primary);
+  --amber-strong: #c48c0e;
+  --amber-tint: rgba(230, 168, 23, 0.10);
+  --teal-tint: rgba(79, 209, 181, 0.10);
+  --deny-tint: rgba(255, 107, 122, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.35);
+  /* Barra superior clara: crema sobre el negro, borde ámbar al pie. */
+  --bar: linear-gradient(180deg, #fffaf0 0%, #f4e9d0 100%);
+  --bar-ink: #000;
+  --bar-muted: #4a3f2a;    /* solapas en reposo: 8.5:1 sobre la crema */
+  --brand-text: #a47604;   /* "ámbar" del wordmark: E6A817 oscurecido hasta
+                              3.4:1 al pie de la barra (texto grande en negrita
+                              pide 3:1); más claro no llegaba abajo */
   --mono: ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, monospace;
   /* Tipografía del deck: Cambria en títulos, Calibri en el cuerpo. */
   --head: Cambria, 'Gill Sans', Georgia, serif;
@@ -50,8 +59,8 @@
 * { box-sizing: border-box; }
 
 body {
-  margin: 0;
-  background: var(--bg);
+  margin: 0; min-height: 100vh;
+  background: #000 var(--page) fixed;
   color: var(--text);
   font: 14px/1.5 var(--body);
 }
@@ -59,11 +68,11 @@ body {
 /* Títulos en Cambria (el deck): el cuerpo queda en Calibri. */
 h1, h2, h3, .panel h2, .grafo-props h3 { font-family: var(--head); letter-spacing: 0.01em; }
 
-.app { max-width: 1500px; margin: 0 auto; padding: 20px; }
+.app { padding: 20px; }
 
-/* Foco visible en todo lo interactivo: sobre fondo claro el outline por
-   defecto del navegador casi no se ve. */
-:where(button, input, select, textarea, summary, [tabindex]):focus-visible {
+/* Foco visible en todo lo interactivo: el outline por defecto del navegador
+   casi no se ve sobre estos fondos. */
+:where(a, button, input, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 8px;
@@ -71,34 +80,42 @@ h1, h2, h3, .panel h2, .grafo-props h3 { font-family: var(--head); letter-spacin
 
 ::placeholder { color: var(--muted); opacity: 1; }
 
+/* Superficies que dibuja el navegador: selección, cursor de texto, scrollbars y
+   controles nativos (checkbox, fecha) toman la paleta en vez del azul y el
+   gris del sistema. */
+::selection { background: rgba(230, 168, 23, 0.35); color: var(--text); }
+html { scrollbar-color: var(--control) transparent; }
+input, textarea { caret-color: var(--primary); }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
+
+/* Íconos SVG (Icon.jsx): se alinean con el texto que acompañan. */
+.icon { flex: none; display: inline-block; vertical-align: -0.18em; }
+
 /* ---- header ---- */
-/* Cabecera de marca Medambar: banda navy con el acento ámbar al pie (la firma
-   del deck). El wordmark lleva un sello con la inicial; el color de marca se usa
-   acá como identidad, no como decoración suelta. */
+/* Barra superior Medambar: banda crema con el acento ámbar al pie, el logo, el
+   wordmark y las solapas de nivel superior (Operación / Red de datos). Queda
+   fija arriba al scrollear, así la navegación siempre está a mano. */
 .header {
-  display: flex; justify-content: space-between; align-items: center;
-  flex-wrap: wrap; gap: 12px; margin: -20px -20px 18px; padding: 16px 20px;
-  background: linear-gradient(180deg, var(--text) 0%, #0e2b49 100%);
-  border-bottom: 3px solid var(--amber);
+  position: sticky; top: 0; z-index: 50;
+  display: flex; justify-content: flex-start; align-items: center;
+  flex-wrap: wrap; gap: 12px 36px; margin: -20px -20px 18px; padding: 10px 20px 0;
+  background: var(--bar);
+  border-bottom: 3px solid var(--primary);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
 }
-.brand { display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; }
 .brand-mark {
   width: 40px; height: 40px; flex: none; display: block;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
 }
 .grafo-titulo { display: flex; align-items: center; gap: 10px; }
 .brand-mark-sm { flex: none; display: block; }
-.header h1 { margin: 0; font-size: 20px; color: #fff; }
+.header h1 { margin: 0; font-size: 22px; color: var(--bar-ink); }
 .wordmark { font-weight: 700; }
-.wordmark .accent { color: var(--amber); }
-.subtitle { margin: 2px 0 0; color: #b9cde0; font-size: 13px; font-family: var(--body); }
-.header-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.wordmark .accent { color: var(--brand-text); }
 
 /* ---- layout ---- */
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
 .main-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.side-col { position: sticky; top: 16px; }
-@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } .side-col { position: static; } }
 
 /* ---- paneles ---- */
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); }
@@ -114,67 +131,67 @@ h1, h2, h3, .panel h2, .grafo-props h3 { font-family: var(--head); letter-spacin
 }
 .chip:hover { color: var(--text); border-color: var(--accent); }
 .chip.active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.chip-volver { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
 
 /* ---- tabs y formularios ---- */
-.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+/* Pestañas internas de un panel (Emitir / Consentimiento): control segmentado,
+   para no confundirse con la navegación de la barra ni con los chips. */
+.tabs {
+  display: inline-flex; flex-wrap: wrap; gap: 2px; margin-bottom: 14px; padding: 3px;
+  background: var(--field); border: 1px solid var(--border); border-radius: 10px;
+}
 .tab {
-  background: none; border: 1px solid var(--control); color: var(--muted);
-  border-radius: 8px; padding: 6px 12px; cursor: pointer;
-  transition: border-color 160ms ease-out, color 160ms ease-out;
+  background: none; border: none; color: var(--muted);
+  border-radius: 7px; padding: 6px 14px; cursor: pointer; font-weight: 600;
+  transition: background-color 160ms ease-out, color 160ms ease-out;
 }
-.tab:hover { color: var(--text); border-color: var(--accent); }
-.tab.active { background: var(--panel); color: var(--accent); border-color: var(--accent); font-weight: 600; }
-.form { display: flex; flex-direction: column; gap: 10px; }
-.form label, .field-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-.form input, .form select, .form textarea {
-  background: var(--bg); color: var(--text); border: 1px solid var(--control);
-  border-radius: 8px; padding: 8px 10px; font: inherit;
-}
-.form textarea { font-family: var(--mono); font-size: 12px; }
+.tab:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
+.tab.active, .tab.active:hover:not(:disabled) { background: var(--tint); color: var(--accent); }
+.form { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* Los botones de un formulario van a su tamaño natural: estirados al ancho de
+   la columna se leían como barras, no como acciones. */
+.form > button, .form > .btn-row { align-self: flex-start; }
+.form label, .field-label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); }
+.form textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
 
-/* Inputs Medambar: fondo blanco como las tarjetas, borde de control (3.6:1,
-   WCAG 1.4.11), radio 10px, una sombra de profundidad muy suave en reposo y, al
-   foco, el borde azul de marca + anillo. El outline de teclado lo sigue
-   poniendo :focus-visible; el anillo y la sombra son el pulido visual. */
-.form input, .form select, .form textarea,
-.clinic-form input, .clinic-form select, .acciones-activo select {
-  background: #fff; color: var(--text);
+/* Inputs Medambar: fondo hundido, borde de control (3.7:1, WCAG 1.4.11), radio
+   10px y, al foco, el borde ámbar + anillo. El outline de teclado lo sigue
+   poniendo :focus-visible; el anillo es el pulido visual. Mismo alto que el
+   botón del Dropdown, para que un formulario mixto quede alineado. */
+.form input, .form textarea, .clinic-form input {
+  background: var(--field); color: var(--text);
   border: 1px solid var(--control); border-radius: 10px;
   padding: 10px 12px; font-size: 13.5px; line-height: 1.4;
-  box-shadow: inset 0 1px 2px rgba(18, 54, 92, 0.05);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
   transition: border-color 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out;
 }
-.form input:hover, .form select:hover, .form textarea:hover,
-.clinic-form input:hover, .clinic-form select:hover, .acciones-activo select:hover {
-  border-color: var(--accent); background-color: #fcfdff;
+.form input:hover, .form textarea:hover, .clinic-form input:hover {
+  border-color: var(--accent); background-color: var(--field-hover);
 }
-.form input:focus, .form select:focus, .form textarea:focus,
-.clinic-form input:focus, .clinic-form select:focus, .acciones-activo select:focus {
+.form input:focus, .form textarea:focus, .clinic-form input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(28, 106, 166, 0.16), inset 0 1px 2px rgba(18, 54, 92, 0.04);
-  background-color: #fff;
+  box-shadow: 0 0 0 3px rgba(230, 168, 23, 0.28), inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  background-color: var(--field);
 }
 
-/* Selects Medambar: se reemplaza la flecha nativa (inconsistente entre
-   navegadores) por un caret propio navy; appearance:none la saca y el
-   background-image la dibuja, con padding a la derecha para no pisar el texto. */
-.form select, .clinic-form select, .acciones-activo select {
-  appearance: none; -webkit-appearance: none; -moz-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2312365c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 11px center;
-  background-size: 15px;
-  padding-right: 34px;
-  cursor: pointer;
-}
 /* Labels de formulario: más prolijos, con jerarquía de marca. */
 .form label, .field-label, .clinic-form label {
   font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em; color: var(--muted);
 }
 .renaper-check { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
 .renaper-check label { flex: 1; min-width: 160px; }
-.checkboxes { display: flex; gap: 14px; flex-wrap: wrap; }
-.checkbox { flex-direction: row !important; align-items: center; gap: 6px !important; color: var(--text) !important; }
+.badge-linea { align-self: flex-start; text-transform: none; font-weight: 600; letter-spacing: 0; }
+.checkboxes { display: flex; gap: 8px 16px; flex-wrap: wrap; margin: 0; padding: 0; border: none; min-width: 0; }
+.checkboxes legend { padding: 0; margin-bottom: 6px; width: 100%; }
+.checkbox { flex-direction: row !important; align-items: center; gap: 7px !important; color: var(--text) !important; font-weight: 400 !important; cursor: pointer; }
+.checkbox input { width: 16px; height: 16px; margin: 0; }
+
+/* Acciones: dos columnas en pantallas anchas (quién y sobre qué paciente a la
+   izquierda, lo propio de cada acción a la derecha). */
+.acciones-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px 28px; align-items: start; }
+.acciones-resultado:empty { display: none; }
+.acciones-resultado { margin-top: 14px; }
+@media (max-width: 900px) { .acciones-grid { grid-template-columns: 1fr; } }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 button {
   background: var(--panel); color: var(--text); border: 1px solid var(--control);
@@ -183,47 +200,74 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent-strong); color: #fff; font-weight: 600; }
+/* El primario deshabilitado no se apaga con opacidad: ámbar al 45% sobre negro
+   da un marrón que parece otro color de marca. Pasa a superficie neutra. */
+button.primary:disabled {
+  opacity: 1; background: var(--panel-2); border-color: var(--border); color: var(--muted); font-weight: 600;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--primary-ink); font-weight: 700; }
 button.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
 button.danger { border-color: var(--deny); color: var(--deny); }
-button.danger:hover:not(:disabled) { background: #fdeef1; border-color: var(--deny); }
+button.danger:hover:not(:disabled) { background: var(--deny-tint); border-color: var(--deny); }
 button.small { padding: 5px 10px; font-size: 12px; }
-button.link { background: none; border: none; color: var(--accent); padding: 0; text-decoration: underline; }
+button.link {
+  background: none; border: none; color: var(--accent); padding: 0;
+  text-decoration: underline; text-underline-offset: 3px; white-space: nowrap;
+}
+
+/* Identificador de un activo en una tabla: enlace a su ficha. Va en el color
+   del texto con subrayado tenue —una columna entera en ámbar competiría con
+   las acciones— y toma el ámbar al pasar el mouse. */
+.enlace-activo {
+  color: var(--text); text-decoration: underline; text-decoration-color: var(--control);
+  text-underline-offset: 3px; transition: color 140ms ease-out, text-decoration-color 140ms ease-out;
+}
+.enlace-activo:hover { color: var(--accent); text-decoration-color: var(--accent); }
 
 /* ---- resultados ---- */
 .result { border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .result.ok { background: var(--teal-tint); border: 1px solid var(--permit); color: var(--permit); }
-.result.error { background: #fbe6ea; border: 1px solid var(--deny); color: #9e162f; }
+.result.error { background: var(--deny-tint); border: 1px solid var(--deny); color: var(--deny); }
 .result.pending { color: var(--muted); }
 .result.decision { font-size: 26px; font-weight: 800; text-align: center; padding: 16px; }
 .result.decision.permit { color: var(--permit); background: var(--teal-tint); border: 1px solid var(--permit); }
-.result.decision.deny { color: #9e162f; background: #fbe6ea; border: 1px solid var(--deny); }
+.result.decision.deny { color: var(--deny); background: var(--deny-tint); border: 1px solid var(--deny); }
 .result.decision .reason { font-size: 14px; font-weight: 400; display: block; margin-top: 4px; }
 .error-text { color: var(--deny); font-size: 12px; }
 
 /* ---- tablas ---- */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+/* Fechas, puertos y hashes en columnas: cifras de ancho fijo para que se
+   puedan comparar fila contra fila. */
+table, code { font-variant-numeric: tabular-nums; }
 tr:last-child td { border-bottom: none; }
 code { font-family: var(--mono); font-size: 12px; }
 .muted { color: var(--muted); }
 .empty { color: var(--muted); font-style: italic; text-align: center; padding: 14px !important; }
 .org-badge { font-weight: 600; white-space: nowrap; }
 .badge { border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-.badge.permit { color: var(--permit); background: #d4e9e6; }
-.badge.deny { color: #9e162f; background: #fbdde3; }
-.badge.warn { color: #7a4f05; background: #faeccc; }
+.badge.permit { color: var(--permit); background: rgba(79, 209, 181, 0.16); }
+.badge.deny { color: var(--deny); background: rgba(255, 107, 122, 0.16); }
+.badge.warn { color: var(--warn); background: rgba(240, 184, 74, 0.16); }
 .history-row td { background: var(--panel-2); }
 .timeline { margin: 6px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
 
 /* ---- feed ---- */
 .feed-panel { max-height: calc(100vh - 60px); display: flex; flex-direction: column; }
 .feed { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.feed-item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
-.feed-item.delivery { border-color: var(--amber); border-left-width: 3px; background: var(--amber-tint); }
-.feed-title { font-weight: 700; margin-bottom: 4px; }
-.feed-body { display: flex; flex-direction: column; gap: 4px; }
+/* Entregas: tarjetas en grilla, así una pantalla ancha muestra varias a la vez
+   en vez de una fila de 1500 px por entrega. */
+.feed.feed-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); align-items: start; }
+.feed-grilla > .empty { grid-column: 1 / -1; }
+.feed-item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+.feed-item.delivery { border-color: rgba(230, 168, 23, 0.45); background: var(--amber-tint); }
+.feed-title { font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+.feed-icono { color: var(--accent); }
+.feed-body { display: flex; flex-direction: column; gap: 6px; }
+.feed-body > button { align-self: flex-start; margin-top: 2px; }
+.ruta-orgs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .feed details { margin-top: 4px; }
 .feed summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .feed pre {
@@ -236,17 +280,19 @@ code { font-family: var(--mono); font-size: 12px; }
 /* Con muchas clínicas la topología no entra en el ancho del panel: scrollea
    ella sola en vez de comprimir las cajas hasta volverlas ilegibles. */
 
+.subtitulo {
+  margin: 18px 0 10px; padding-top: 16px; border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+/* Alta en una sola fila: identificador, nombre, jurisdicción y el botón al
+   final, todos al mismo alto. */
 .clinic-form {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  gap: 10px; align-items: end;
-  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(200px, 0.9fr) auto;
+  gap: 12px; align-items: end;
 }
-.clinic-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-.clinic-form input {
-  background: var(--bg); color: var(--text); border: 1px solid var(--control);
-  border-radius: 8px; padding: 8px 10px; font: inherit;
-}
-@media (max-width: 700px) { .clinic-form { grid-template-columns: 1fr; } }
+.clinic-form label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); }
+@media (max-width: 900px) { .clinic-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .clinic-form { grid-template-columns: 1fr; } .clinic-form > button { justify-self: start; } }
 
 .cell-actions { width: 1%; white-space: nowrap; }
 /* Una clínica dada de baja se marca con un fondo tenue y su badge, no bajándole
@@ -266,15 +312,29 @@ code { font-family: var(--mono); font-size: 12px; }
 .op-log li.error { color: var(--deny); font-weight: 600; }
 
 /* ---- solapas de nivel superior ---- */
-.solapas { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+/* Viven en la barra crema: tinta oscura, y la activa se marca con el ámbar de
+   marca pegado al borde inferior de la barra. */
+.solapas { display: flex; flex-wrap: wrap; gap: 4px; align-self: stretch; align-items: flex-end; }
+/* La activa se marca con una barra negra apoyada sobre el borde ámbar de la
+   barra (un pseudo-elemento, no un border-bottom grueso sobre una caja con
+   esquinas redondeadas, que se ve torcido en los extremos). */
 .solapa {
-  background: none; border: none; border-bottom: 2px solid transparent;
-  color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 16px;
-  cursor: pointer; font: inherit; font-weight: 600;
-  transition: color 160ms ease-out, border-color 160ms ease-out;
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; border-radius: 8px 8px 0 0; padding: 10px 16px 12px;
+  color: var(--bar-muted); text-decoration: none; cursor: pointer;
+  font: inherit; font-size: 15px; font-weight: 600;
+  transition: color 160ms ease-out, background-color 160ms ease-out;
 }
-.solapa:hover { color: var(--text); }
-.solapa.active { color: var(--accent); border-bottom-color: var(--accent); }
+.solapa::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
+  background: transparent; transition: background-color 160ms ease-out;
+}
+.solapa:hover:not(:disabled) { color: var(--bar-ink); background: rgba(230, 168, 23, 0.14); }
+.solapa.active, .solapa.active:hover:not(:disabled) { color: var(--bar-ink); background: rgba(230, 168, 23, 0.22); }
+.solapa.active::after { background: var(--bar-ink); }
+.solapa:focus-visible { outline-color: var(--bar-ink); outline-offset: -2px; }
+.solapa-caret, .dd-caret { transition: transform 160ms ease-out; }
+.solapa-caret.abierto, .dd-caret.abierto { transform: rotate(180deg); }
 
 /* Flyout de módulos de Operación: aparece al pasar el cursor (o al enfocar, para
    teclado/tap) sobre la solapa Operación, en vez de ocupar una fila fija. */
@@ -283,12 +343,13 @@ code { font-family: var(--mono); font-size: 12px; }
   position: absolute; top: 100%; left: 0; z-index: 30;
   display: none; flex-direction: column; min-width: 190px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  box-shadow: var(--shadow); padding: 6px; margin-top: 2px;
+  box-shadow: var(--shadow); padding: 6px; margin-top: 3px;
 }
 .solapa-wrap:hover .submenu, .solapa-wrap:focus-within .submenu, .submenu.open { display: flex; }
 .submenu-item {
-  background: none; border: none; text-align: left; padding: 8px 12px;
+  display: block; background: none; border: none; text-align: left; padding: 8px 12px;
   border-radius: 8px; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer;
+  text-decoration: none;
   transition: background-color 140ms ease-out, color 140ms ease-out;
 }
 .submenu-item:hover { background: var(--panel-2); color: var(--text); }
@@ -301,54 +362,23 @@ code { font-family: var(--mono); font-size: 12px; }
 }
 /* Botón de Capa de red más largo (~doble). */
 .grafo-capa-sel .dd { min-width: 220px; }
-.grafo-capa-sel select {
-  appearance: none; -webkit-appearance: none; -moz-appearance: none;
-  background-color: #fff; color: var(--text);
-  border: 1px solid var(--control); border-radius: 10px;
-  padding: 9px 34px 9px 12px; font-size: 13.5px; cursor: pointer;
-  box-shadow: inset 0 1px 2px rgba(18, 54, 92, 0.05);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2312365c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 11px center; background-size: 15px;
-  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
-}
-.grafo-capa-sel select:hover { border-color: var(--accent); }
-.grafo-capa-sel select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(28, 106, 166, 0.16); }
-
-/* Rows del dropdown nativo. El popup lo dibuja el SO, así que el estilo es
-   parcial (best-effort): el color/fondo y la opción activa se respetan en los
-   navegadores de escritorio; el padding puede ignorarse en algunos. */
-select option {
-  background: #fff;
-  color: var(--text);
-  padding: 8px 10px;
-  font-weight: 500;
-}
-select option:checked,
-select option:hover {
-  background: var(--tint);
-  color: var(--accent);
-  font-weight: 600;
-}
 
 /* Dropdown propio (Dropdown.jsx): el <select> nativo no deja estilar las filas,
    así que las vistosas van acá — mismo marco que los inputs + lista flotante. */
 .dd { position: relative; }
 .dd-trigger {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  background: #fff; color: var(--text); text-align: left;
+  background: var(--field); color: var(--text); text-align: left;
   border: 1px solid var(--control); border-radius: 10px;
-  padding: 10px 12px; font: inherit; font-size: 13.5px; cursor: pointer;
-  box-shadow: inset 0 1px 2px rgba(18, 54, 92, 0.05);
+  padding: 10px 12px; font: inherit; font-size: 13.5px; line-height: 1.4; cursor: pointer;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
   transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
 }
 .dd-trigger:hover:not(:disabled) { border-color: var(--accent); }
 .dd-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dd-trigger:disabled { opacity: 0.55; cursor: default; }
 .dd-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dd-caret {
-  flex: none; width: 15px; height: 15px;
-  background: no-repeat center / 15px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2312365c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-}
+.dd-caret { color: var(--muted); }
 .dd-list {
   position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0;
   margin: 0; padding: 6px; list-style: none;
@@ -359,18 +389,16 @@ select option:hover {
   padding: 9px 12px; border-radius: 8px; font-size: 13.5px; color: var(--text);
   cursor: pointer; transition: background-color 120ms ease-out, color 120ms ease-out;
 }
-.dd-opt:hover { background: var(--panel-2); }
+.dd-opt:hover, .dd-opt.resaltada { background: var(--panel-2); }
 .dd-opt.active { background: var(--tint); color: var(--accent); font-weight: 600; }
 
 /* ---- grafo de datos ---- */
 /* Dos colores nuevos, y solo dos: el resto de los nodos toma el color de su
-   institución. Ambos pasan 4.5:1 sobre blanco porque también se usan como
-   texto en la leyenda. */
+   institución. Se usa también en la leyenda, sobre --panel-2. */
 :root {
-  --activo: #3f6480;
+  --activo: #7d8aa0;
 }
 
-.grafo-controles { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .grafo-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 @media (max-width: 1000px) { .grafo-layout { grid-template-columns: 1fr; } }
 
@@ -380,21 +408,19 @@ select option:hover {
    la que se usa seguido; expandir queda pegada al borde. */
 .grafo-acciones { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; }
 .chip-icono {
-  background: var(--panel); width: 30px; height: 30px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 15px; line-height: 1;
+  background: var(--panel); width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center; color: var(--text);
 }
-/* Bandas por capa de la topología (nacional / provincial): franjas de fondo
-   que separan los niveles. No capturan el puntero para no estorbar el
-   arrastre del lienzo ni de los nodos. */
-.grafo-banda rect { pointer-events: none; stroke: var(--border); stroke-width: 1; }
+/* Bandas por capa de la topología (nacional / provincial). Se ve una capa a la
+   vez, así que la franja no lleva fondo ni marco —dentro del lienzo dibujaba
+   un segundo recuadro—: queda el rótulo. No capturan el puntero para no
+   estorbar el arrastre del lienzo ni de los nodos. */
+.grafo-banda rect { pointer-events: none; fill: transparent; stroke: none; }
 .grafo-banda-label {
   pointer-events: none; font-family: var(--head); font-size: 11px; font-weight: 700;
   letter-spacing: 0.04em; text-transform: uppercase;
 }
-.banda-nacional rect { fill: #eef3f8; }
 .banda-nacional .grafo-banda-label { fill: var(--text); }
-.banda-provincial rect { fill: #eef7f4; }
 .banda-provincial .grafo-banda-label { fill: var(--permit); }
 
 .grafo {
@@ -415,7 +441,7 @@ select option:hover {
   fill: var(--text); font-size: 11px; font-weight: 600; pointer-events: none;
   paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
 }
-.n-org circle { fill: var(--accent); }
+.n-org circle { fill: var(--org1); }
 .n-activo rect { fill: var(--activo); }
 /* El tipo FHIR va debajo del identificador, en menor jerarquía: identifica al
    documento pero no es su nombre. */
@@ -447,25 +473,29 @@ select option:hover {
 /* Los hashes son largos y no se abrevian: en una vista de auditoría el valor
    completo es el punto. Se parten donde entren en vez de desbordar. */
 .hash { word-break: break-all; }
-.props-anchas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; }
-.lista-simple { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+/* .props es una columna; la ficha del activo la abre en grilla (el selector
+   doble gana sobre .props, que se declara más abajo). */
+.props.props-anchas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 28px; }
 
 /* Fila de acciones del documento: los dos pasos del circuito quedan juntos y a
-   la vista, sin formulario de por medio. */
-.acciones-activo { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.acciones-activo select { background: var(--bg); color: var(--text); border: 1px solid var(--control); border-radius: 8px; padding: 8px 10px; font: inherit; }
+   la vista, sin formulario de por medio. Cada paso (pedir acceso / ceder) es un
+   grupo, separado del otro por una línea. */
+.acciones-activo { display: flex; align-items: flex-end; gap: 14px 20px; flex-wrap: wrap; margin: 4px 0 16px; }
+.accion-grupo { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.accion-grupo + .accion-grupo { padding-left: 20px; border-left: 1px solid var(--border); }
 
 .accesos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .accesos > li { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
 .acceso-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
 
 /* El bloque se despega del acceso que lo contiene: es un dato del ledger, no
-   del pedido, y conviene que se lea como una ficha aparte. */
-.bloque { margin-top: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-.bloque-num { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
-.bloque .props { margin: 0; }
+   del pedido, y conviene que se lea como una ficha aparte. Va hundido (fondo
+   del lienzo, sin borde) y no como otra tarjeta dentro de la tarjeta. */
+.bloque { margin-top: 10px; background: var(--bg); border-radius: 8px; padding: 12px 14px; }
+.bloque-num { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.bloque .props { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 24px; }
 .bloque-pendiente { color: var(--muted); font-style: italic; }
-.bloque-error { color: var(--deny); background: #fbe6ea; border-color: var(--deny); }
+.bloque-error { color: var(--deny); background: var(--deny-tint); border: 1px solid var(--deny); }
 
 /* Ampliado: el cuadro ocupa toda la ventana del navegador —sin salir de la
    pagina— y el panel de detalle baja al pie, en ancho completo. Se vuelve al
@@ -497,7 +527,7 @@ select option:hover {
 .grafo-leyenda { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
 .grafo-leyenda li { display: flex; align-items: center; gap: 8px; }
 .punto { width: 12px; height: 12px; border-radius: 50%; flex: none; }
-.punto.n-org { background: var(--accent); }
+.punto.n-org { background: var(--org1); }
 /* Misma forma que en el lienzo: la referencia tiene que coincidir con lo que se
    dibuja, no solo con el color. */
 .hoja { width: 16px; height: 11px; border-radius: 2px; background: var(--activo); flex: none; }
@@ -532,13 +562,15 @@ select option:hover {
    dentro de su panel en vez de desbordar la página. */
 @media (max-width: 640px) {
   .app { padding: 12px 16px; }
-  .header { margin: -12px -16px 16px; padding: 14px 16px; }
+  .header { margin: -12px -16px 16px; padding: 10px 16px 0; gap: 4px 16px; }
+  .solapa { padding: 8px 12px 9px; font-size: 14px; }
   .panel { padding: 12px; overflow-x: auto; }
   table { font-size: 12px; }
   th, td { padding: 5px 6px; }
   .header h1 { font-size: 18px; }
-  .subtitle { font-size: 12px; }
   .brand-mark { width: 34px; height: 34px; }
+  .accion-grupo + .accion-grupo { padding-left: 0; border-left: none; }
+  .panel-head { flex-wrap: wrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {

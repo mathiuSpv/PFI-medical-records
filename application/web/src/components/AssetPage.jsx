@@ -10,8 +10,18 @@
 // chaincode no guarda el TxID de la emisión ni expone el historial del activo,
 // así que no hay por dónde buscarlo.
 import { useEffect, useState } from 'react';
-import { api, irA, orgByMsp, useFetch } from '../api.js';
+import { api, fmtDia, fmtFecha, irA, orgByMsp, rutaAnterior, useFetch } from '../api.js';
 import Dropdown from './Dropdown.jsx';
+import Icon from './Icon.jsx';
+
+// A la ficha se llega desde el mapa, la tabla de Activos o la Auditoría:
+// "volver" lleva a ese lugar. Sin origen conocido (link directo) va al mapa.
+const ORIGENES = {
+  '/red': 'volver al mapa',
+  '/mapa': 'volver al mapa',
+  '/operacion/activos': 'volver a Activos',
+  '/operacion/auditoria': 'volver a Auditoría',
+};
 
 function Bloque({ txId, channel }) {
   const [estado, setEstado] = useState({ cargando: true });
@@ -100,8 +110,11 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
   const cargandoHistorial = !logs || !consents;
   const entradas = consentimientos.length + accesos.length;
 
+  const origen = ORIGENES[rutaAnterior()] ? rutaAnterior() : '/red';
   const volver = (
-    <button className="chip" onClick={() => irA('/red')}>← volver al mapa</button>
+    <button className="chip chip-volver" onClick={() => irA(origen)}>
+      <Icon name="arrow-left" size={14} /> {ORIGENES[origen]}
+    </button>
   );
 
   if (assets && !activo) {
@@ -186,22 +199,24 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
             institución que se elija; ceder y revocar los firma la emisora, sin
             elección posible: el chaincode rechaza un GrantConsent de otra org. */}
         <div className="acciones-activo">
-          <label className="field-label">
-            Pedir acceso como
-            <Dropdown
-              value={solicitanteValido}
-              onChange={setSolicitante}
-              disabled={!!ocupado || solicitantes.length < 2}
-              options={solicitantes.map((c) => ({ value: c.key, label: c.label }))}
-              ariaLabel="Pedir acceso como"
-            />
-          </label>
-          <button className="primary" disabled={!!ocupado || !quienPide} onClick={pedirAcceso}>
-            {ocupado === 'pedir' ? 'Evaluando…' : 'Pedir acceso'}
-          </button>
+          <div className="accion-grupo">
+            <label className="field-label">
+              Pedir acceso como
+              <Dropdown
+                value={solicitanteValido}
+                onChange={setSolicitante}
+                disabled={!!ocupado || solicitantes.length < 2}
+                options={solicitantes.map((c) => ({ value: c.key, label: c.label }))}
+                ariaLabel="Pedir acceso como"
+              />
+            </label>
+            <button className="primary" disabled={!!ocupado || !quienPide} onClick={pedirAcceso}>
+              {ocupado === 'pedir' ? 'Evaluando…' : 'Pedir acceso'}
+            </button>
+          </div>
 
           {emisorActivo && orgDestino && (
-            <>
+            <div className="accion-grupo">
               <label className="field-label">
                 Ceder a
                 <Dropdown
@@ -221,7 +236,7 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
                   {ocupado === 'ceder' ? 'Cediendo…' : `Ceder ${activo.ResourceType} por un año (firma ${emisor.label})`}
                 </button>
               )}
-            </>
+            </div>
           )}
 
           {!emisorActivo && (
@@ -252,7 +267,7 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
 
         <dl className="props props-anchas">
           <div><dt>Tipo FHIR</dt><dd>{activo.ResourceType}</dd></div>
-          <div><dt>Emitido</dt><dd>{String(activo.Timestamp).replace('T', ' ').replace('Z', '')}</dd></div>
+          <div><dt>Emitido</dt><dd title={activo.Timestamp}>{fmtFecha(activo.Timestamp)}</dd></div>
           <div><dt>Paciente</dt><dd><code className="hash">{activo.PatientIDHash}</code></dd></div>
           <div><dt>CID en IPFS</dt><dd><code className="hash">{activo.IpfsCid}</code></dd></div>
           <div><dt>Contenido</dt><dd>cifrado AES-256-GCM, fuera del ledger</dd></div>
@@ -297,7 +312,7 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
                 </div>
                 <div className="muted">
                   {c.ResourceTypes?.length ? c.ResourceTypes.join(', ') : 'sin tipos'}
-                  {' · vence '}{String(c.Expiry).slice(0, 10)}
+                  {' · vence '}{fmtDia(c.Expiry)}
                 </div>
               </li>
             );
@@ -311,7 +326,7 @@ export default function AssetPage({ id, tick, activas = [], onDone }) {
                   <span className={`badge ${l.Decision === 'PERMIT' ? 'permit' : 'deny'}`}>{l.Decision}</span>
                   <strong style={{ color: quien.color }}>{quien.label}</strong>
                   <span className="muted">pidió acceso</span>
-                  <span className="muted">{String(l.Timestamp).replace('T', ' ').replace('Z', '')}</span>
+                  <span className="muted" title={l.Timestamp}>{fmtFecha(l.Timestamp)}</span>
                 </div>
                 {l.Reason && <div className="muted">{l.Reason}</div>}
                 <div className="muted">tx <code className="hash">{l.TxID}</code></div>
