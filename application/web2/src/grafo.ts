@@ -1,0 +1,488 @@
+// Grafo de trazabilidad del activo médico digital.
+//
+// El modelo tiene DOS entidades y UNA relación: la institución emitió el
+// documento. Nada más se dibuja.
+//
+// La decisión de fondo: la unidad de auditoría no es el nodo ni una arista por
+// acceso, es la relación de emisión. Cada EMITIÓ carga el documento entero y su
+// historial completo de accesos — quién lo pidió, cuándo, qué respondió el
+// chaincode, con qué motivo, bajo qué consentimiento y con qué TxID, cada
+// evaluación por separado. Abrir esa única línea reconstruye toda la vida del
+// documento.
+//
+// Una arista por solicitud, que es lo que se probó antes, multiplica las líneas
+// entre los mismos nodos y obliga a recorrer el dibujo para juntar lo que
+// conviene leer de una sola vez. El paciente y el CID de IPFS, por lo mismo,
+// son propiedades y no nodos.
+
+// ---------------------------------------------------------------------------
+// Construcción
+// ---------------------------------------------------------------------------
+
+import { fmtDia, fmtFecha } from './api';
+import type { AccessLog, Asset, ClinicView, Consent } from './types';
+
+export type TipoNodo = 'org' | 'activo';
+
+export const TIPOS: Record<TipoNodo, { radio: number }> = {
+  org: { radio: 24 },
+  activo: { radio: 19 },
+};
+
+export interface Evaluacion {
+  ts: string;
+  decision: string;
+  motivo: string;
+  txId: string;
+  tipo: string;
+}
+
+export interface Solicitud {
+  solicitante: string;
+  resultado: string;
+  motivo: string;
+  consentimiento: string;
+  resumen: string;
+  evaluaciones: Evaluacion[];
+}
+
+export interface GraphNode {
+  id: string;
+  tipo: TipoNodo;
+  capas: string[];
+  etiqueta: string;
+  subtipo?: string;
+  color?: string;
+  baja?: boolean;
+  props: Record<string, string | undefined>;
+  // Capa en la que se dibuja (la elige GraphPanel).
+  capa?: string;
+  // Layout: lo escribe el motor de fuerzas.
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  fijo?: boolean;
+  // Solo durante acomodar(): el nodo conserva su lugar previo y no se mueve.
+  anclado?: boolean;
+  gravedadY?: number;
+  bandTop?: number;
+  bandBot?: number;
+  bandY?: number;
+  margenX?: number;
+  margenY?: number;
+}
+
+export interface GraphEdge {
+  origen: string;
+  destino: string;
+  rel: string;
+  documento: string;
+  props: Record<string, string>;
+  solicitudes: Solicitud[];
+  accesos?: number;
+  rechazos?: number;
+  detalle?: string;
+}
+
+export interface Grafo {
+  nodos: GraphNode[];
+  aristas: GraphEdge[];
+  capas: string[];
+}
+
+const idOrg = (msp: string) => `org:${msp}`;
+const idAct = (fhir: string) => `act:${fhir}`;
+
+function estadoConsentimiento(c: Consent | undefined) {
+  if (!c) return null;
+  if (c.Revoked) return 'revocado';
+  if (new Date(c.Expiry) <= new Date()) return 'vencido';
+  return 'vigente';
+}
+
+
+// construirGrafo arma el grafo desde las cuatro fuentes del BFF. Tolera que
+// cualquiera venga null (todavía cargando) devolviendo lo que se pueda.
+export interface FuentesGrafo {
+  clinics: ClinicView[] | null;
+  assets: Asset[] | null;
+  consents: Consent[] | null;
+  logs: AccessLog[] | null;
+  etiquetaOrg?: (msp: string) => string;
+}
+
+export function construirGrafo({ clinics, assets, consents, logs, etiquetaOrg }: FuentesGrafo): Grafo {
+  const nodos = new Map<string, GraphNode>();
+  const aristas: GraphEdge[] = [];
+  const nombreOrg = etiquetaOrg ?? ((msp: string) => msp);
+
+  // Los consentimientos no se dibujan: se consultan para explicar por qué una
+  // solicitud terminó como terminó, que es donde aportan.
+  const consentPorClave = new Map<string, Consent>();
+  for (const c of consents ?? []) {
+    consentPorClave.set(`${c.PatientIDHash}|${c.GrantedToOrg}`, c);
+  }
+
+  for (const c of clinics ?? []) {
+    nodos.set(idOrg(c.mspId), {
+      id: idOrg(c.mspId),
+      tipo: 'org',
+      // Capas a las que pertenece: toda institución es miembro del canal
+      // nacional, y además del de su provincia si tiene una. Un nodo puede
+      // verse en más de una capa.
+      capas: ['nacional', ...(c.jurisdiccion ? [c.jurisdiccion] : [])],
+      etiqueta: c.label ?? c.nombre ?? c.mspId,
+      color: c.color,
+      baja: c.estado !== 'activa',
+      x: 0, y: 0, dx: 0, dy: 0,
+      props: {
+        'MSP ID': c.mspId,
+        'Canal privado': c.privateChannel,
+        Estado: c.estado,
+      },
+    });
+  }
+
+  const pacientePorActivo = new Map<string, string>();
+
+  for (const a of assets ?? []) {
+    pacientePorActivo.set(a.FhirResourceID, a.PatientIDHash);
+    // El activo vive en su canal de ORIGEN (su provincia), y además en el
+    // nacional si ascendió (se publicó su referencia allí, _channel nacional)
+    // o si nació nacional.
+    const origen = (!a.OriginChannel || a.OriginChannel === 'canal-nacional')
+      ? 'nacional'
+      : a.OriginChannel.replace(/^canal-/, '');
+    const capasActivo = origen === 'nacional'
+      ? ['nacional']
+      : (a._channel === 'canal-nacional' ? [origen, 'nacional'] : [origen]);
+    nodos.set(idAct(a.FhirResourceID), {
+      id: idAct(a.FhirResourceID),
+      tipo: 'activo',
+      capas: capasActivo,
+      etiqueta: a.FhirResourceID,
+      subtipo: a.ResourceType,
+      x: 0, y: 0, dx: 0, dy: 0,
+      props: {
+        'Tipo FHIR': a.ResourceType,
+        Paciente: a.PatientIDHash,
+        'CID en IPFS': a.IpfsCid,
+        'Emitido por': nombreOrg(a.OwnerOrg),
+        Emitido: fmtFecha(a.Timestamp),
+        Contenido: 'AES-256-GCM en IPFS (off-chain); la cadena solo ancla el CID',
+      },
+    });
+
+    if (nodos.has(idOrg(a.OwnerOrg))) {
+      aristas.push({
+        origen: idOrg(a.OwnerOrg),
+        destino: idAct(a.FhirResourceID),
+        rel: 'EMITIÓ',
+        documento: a.FhirResourceID,
+        props: {
+          Emisor: nombreOrg(a.OwnerOrg),
+          Documento: a.FhirResourceID,
+          'Tipo FHIR': a.ResourceType,
+          Paciente: a.PatientIDHash,
+          'CID en IPFS': a.IpfsCid,
+          'Fecha de emisión': fmtFecha(a.Timestamp),
+        },
+        // Lo carga el bloque de abajo, una vez agrupados los accesos.
+        solicitudes: [],
+      });
+    }
+  }
+
+  // Los accesos se agrupan por (solicitante, documento) y se cuelgan de la
+  // relación de emisión de ese documento. No se pierde nada: cada evaluación
+  // queda con su decisión, su motivo y su TxID.
+  const pedidos = new Map<string, { evaluaciones: Evaluacion[] }>();
+  for (const l of logs ?? []) {
+    if (!l.FhirResourceID || !nodos.has(idAct(l.FhirResourceID))) continue;
+    if (!nodos.has(idOrg(l.RequesterOrg))) continue;
+    const clave = `${l.RequesterOrg}|${l.FhirResourceID}`;
+    const p = pedidos.get(clave) ?? { evaluaciones: [] };
+    p.evaluaciones.push({
+      ts: l.Timestamp,
+      decision: l.Decision,
+      motivo: l.Reason || '',
+      txId: l.TxID,
+      tipo: l.ResourceType,
+    });
+    pedidos.set(clave, p);
+  }
+
+  const emisionPorDoc = new Map(aristas.map((a) => [a.documento, a]));
+
+  for (const [clave, p] of pedidos) {
+    const [msp, fhir] = clave.split('|');
+    const emision = emisionPorDoc.get(fhir);
+    if (!emision) continue;
+
+    const evs = [...p.evaluaciones].sort((x, y) => String(x.ts).localeCompare(String(y.ts)));
+    const ultima = evs[evs.length - 1];
+    const permits = evs.filter((e) => e.decision === 'PERMIT').length;
+    const cons = consentPorClave.get(`${pacientePorActivo.get(fhir)}|${msp}`);
+
+    emision.solicitudes.push({
+      solicitante: nombreOrg(msp),
+      // El resultado vigente es el de la última evaluación: si el
+      // consentimiento se revocó después de un PERMIT, lo que corresponde
+      // mostrar es el DENY posterior.
+      resultado: ultima.decision,
+      motivo: ultima.motivo || (ultima.decision === 'PERMIT' ? 'consentimiento vigente y alcanzando el tipo' : '—'),
+      consentimiento: cons
+        ? `${estadoConsentimiento(cons)} · ${cons.ResourceTypes?.length ? cons.ResourceTypes.join(', ') : 'sin tipos'} · vence ${fmtDia(cons.Expiry)}`
+        : 'no existe',
+      resumen: `${evs.length} ${evs.length === 1 ? 'evaluación' : 'evaluaciones'} (${permits} PERMIT · ${evs.length - permits} DENY)`,
+      evaluaciones: evs,
+    });
+  }
+
+  for (const a of aristas) {
+    a.solicitudes.sort((x, y) => x.solicitante.localeCompare(y.solicitante));
+    const n = a.solicitudes.length;
+    const rechazadas = a.solicitudes.filter((s) => s.resultado !== 'PERMIT').length;
+    a.accesos = n;
+    a.rechazos = rechazadas;
+    a.detalle = n === 0 ? 'sin accesos' : `${n} acceso${n > 1 ? 's' : ''}${rechazadas ? ` · ${rechazadas} denegado${rechazadas > 1 ? 's' : ''}` : ''}`;
+  }
+
+  // capas = niveles presentes (unión de las capas de cada nodo), nacional
+  // primero y provincias alfabéticas. Es la lista que ofrece el selector.
+  const presentes = new Set<string>();
+  for (const n of nodos.values()) for (const c of n.capas) presentes.add(c);
+  const provincias = [...presentes].filter((c) => c !== 'nacional').sort();
+  const capas = [...(presentes.has('nacional') ? ['nacional'] : []), ...provincias];
+
+  return { nodos: [...nodos.values()], aristas, capas };
+}
+
+// ---------------------------------------------------------------------------
+// Motor de fuerzas
+// ---------------------------------------------------------------------------
+//
+// Fruchterman-Reingold simplificado: repulsión entre todos los pares, atracción
+// por arista y una gravedad suave al centro para que los componentes sueltos no
+// se vayan al infinito. La temperatura baja en cada tick y limita cuánto se
+// puede mover un nodo, que es lo que hace que el layout converja en vez de
+// oscilar.
+//
+// El costo es O(n²) por tick. Con las magnitudes de este prototipo —decenas de
+// nodos— eso es irrelevante, y evita la complejidad de un quadtree.
+
+const TEMP_INICIAL = 0.16;
+const ENFRIAMIENTO = 0.985;
+const TEMP_MINIMA = 0.0015;
+
+// Posiciones iniciales en círculo y no al azar: el layout converge parecido en
+// cada corrida, así que volver a abrir la solapa no reordena todo el grafo.
+export function posicionesIniciales(nodos: GraphNode[], ancho: number, alto: number, capas: string[] = []) {
+  const bandas = capas.length || 1;
+  const bandH = alto / bandas;
+  const idxDe = new Map(capas.map((c, i) => [c, i] as const));
+
+  // Cada nodo cae en la banda de su capa; se reparte en X dentro de ella y
+  // arranca en el centro vertical de la banda. bandTop/bandBot acotan su
+  // movimiento vertical (dejando arriba lugar para el rótulo de la banda).
+  const porBanda = new Map<number, GraphNode[]>();
+  for (const n of nodos) {
+    const b = idxDe.get(n.capa ?? '') ?? 0;
+    if (!porBanda.has(b)) porBanda.set(b, []);
+    porBanda.get(b)!.push(n);
+  }
+  for (const [b, grupo] of porBanda) {
+    const top = b * bandH;
+    grupo.forEach((n, i) => {
+      const r = TIPOS[n.tipo].radio;
+      n.bandTop = top + r + 28;
+      n.bandBot = top + bandH - (r + (n.subtipo ? 31 : 19));
+      if (n.bandBot < n.bandTop) n.bandBot = n.bandTop;
+      n.bandY = (n.bandTop + n.bandBot) / 2;
+      n.x = ancho * ((i + 1) / (grupo.length + 1));
+      n.y = n.bandY;
+      // Margen propio de cada nodo: acotar por el radio dejaba los rótulos
+      // colgando fuera del lienzo, porque el texto es bastante más ancho que el
+      // círculo. ~5.9 px por carácter a 11 px de fuente, la mitad para cada lado.
+      n.margenX = Math.max(r, (String(n.etiqueta ?? '').length * 5.9) / 2) + 4;
+      n.margenY = r + (n.subtipo ? 31 : 19);
+      // Con una sola capa a la vista no hay franjas que separar: la gravedad
+      // vertical fuerte apilaba todos los nodos en una fila a media altura.
+      n.gravedadY = bandas === 1 ? 0.02 : 0.09;
+    });
+  }
+  return TEMP_INICIAL;
+}
+
+// tick avanza un paso y devuelve la temperatura nueva. Muta x/y de los nodos.
+export function tick(nodos: GraphNode[], aristas: GraphEdge[], temp: number, ancho: number, alto: number) {
+  const n = nodos.length;
+  if (n === 0) return TEMP_MINIMA;
+
+  const area = ancho * alto;
+  const k = Math.sqrt(area / n) * 0.72;
+  const porId = new Map(nodos.map((nd) => [nd.id, nd]));
+
+  for (const nd of nodos) { nd.dx = 0; nd.dy = 0; }
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = nodos[i];
+      const b = nodos[j];
+      let dx = a.x - b.x;
+      let dy = a.y - b.y;
+      let d2 = dx * dx + dy * dy;
+      // Dos nodos exactamente encima no tienen dirección de separación: se les
+      // da un empujón determinista según el índice en vez de uno al azar.
+      if (d2 < 0.01) {
+        dx = (i - j) * 0.1 || 0.1;
+        dy = 0.1;
+        d2 = dx * dx + dy * dy;
+      }
+      const d = Math.sqrt(d2);
+      const fuerza = (k * k) / d;
+      const ux = (dx / d) * fuerza;
+      const uy = (dy / d) * fuerza;
+      a.dx += ux; a.dy += uy;
+      b.dx -= ux; b.dy -= uy;
+    }
+  }
+
+  for (const ar of aristas) {
+    const a = porId.get(ar.origen);
+    const b = porId.get(ar.destino);
+    if (!a || !b) continue;
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+    const fuerza = (d * d) / k;
+    const ux = (dx / d) * fuerza;
+    const uy = (dy / d) * fuerza;
+    a.dx -= ux; a.dy -= uy;
+    b.dx += ux; b.dy += uy;
+  }
+
+  // Gravedad: en X hacia el centro (mantiene el grafo centrado); en Y hacia el
+  // centro de SU banda, con fuerza mayor, para que cada capa quede separada en
+  // su franja en vez de mezclarse con las otras.
+  const cx = ancho / 2;
+  for (const nd of nodos) {
+    const by = nd.bandY ?? alto / 2;
+    nd.dx += (cx - nd.x) * 0.012 * k;
+    nd.dy += (by - nd.y) * (nd.gravedadY ?? 0.09) * k;
+  }
+
+  const limite = Math.max(ancho, alto) * temp;
+  let energia = 0;
+  for (const nd of nodos) {
+    if (nd.fijo || nd.anclado) continue;
+    const d = Math.sqrt(nd.dx * nd.dx + nd.dy * nd.dy) || 0.01;
+    const paso = Math.min(d, limite);
+    const mx = (nd.dx / d) * paso;
+    const my = (nd.dy / d) * paso;
+    nd.x += mx;
+    nd.y += my;
+    energia += mx * mx + my * my;
+    // Se acota por el margen del nodo —que contempla el ancho del rótulo— y no
+    // por su radio: así el texto entra entero en el lienzo.
+    const margenX = nd.margenX ?? TIPOS[nd.tipo].radio + 8;
+    const margenY = nd.margenY ?? TIPOS[nd.tipo].radio + 8;
+    nd.x = Math.max(margenX, Math.min(ancho - margenX, nd.x));
+    // Vertical: acotado a SU banda, no al lienzo entero, para que no se escape
+    // a la franja de otra capa.
+    const bt = nd.bandTop ?? (TIPOS[nd.tipo].radio + 6);
+    const bb = nd.bandBot ?? (alto - margenY);
+    nd.y = Math.max(bt, Math.min(bb, nd.y));
+  }
+
+  // Si el movimiento total ya es despreciable, se corta antes de agotar el
+  // enfriamiento: no tiene sentido seguir gastando frames.
+  if (energia / n < 0.02) return TEMP_MINIMA;
+  return Math.max(temp * ENFRIAMIENTO, TEMP_MINIMA);
+}
+
+export const estaQuieto = (temp: number) => temp <= TEMP_MINIMA;
+
+// separar resuelve las superposiciones que la simulación deja: las fuerzas
+// miran los centros, pero lo que se pisa son los rótulos, bastante más anchos
+// que el círculo. Cada nodo ocupa una caja (su ancho de rótulo × figura más
+// texto) y, mientras dos cajas se crucen, se empujan por el eje de menor
+// penetración. Lo que el usuario soltó a mano (fijo) no se mueve.
+function separar(nodos: GraphNode[], ancho: number, alto: number) {
+  const caja = (n: GraphNode) => {
+    const r = TIPOS[n.tipo].radio;
+    const mx = n.margenX ?? r;
+    return { x0: n.x - mx, x1: n.x + mx, y0: n.y - r - 4, y1: n.y + (n.margenY ?? r) };
+  };
+  const acotar = (n: GraphNode) => {
+    const mx = n.margenX ?? 0;
+    n.x = Math.max(mx, Math.min(ancho - mx, n.x));
+    n.y = Math.max(n.bandTop ?? 0, Math.min(n.bandBot ?? alto, n.y));
+  };
+  for (let vuelta = 0; vuelta < 80; vuelta++) {
+    let movio = false;
+    for (let i = 0; i < nodos.length; i++) {
+      for (let j = i + 1; j < nodos.length; j++) {
+        const a = nodos[i];
+        const b = nodos[j];
+        if (a.fijo && b.fijo) continue;
+        const ca = caja(a);
+        const cb = caja(b);
+        const px = Math.min(ca.x1, cb.x1) - Math.max(ca.x0, cb.x0);
+        const py = Math.min(ca.y1, cb.y1) - Math.max(ca.y0, cb.y0);
+        if (px <= 0 || py <= 0) continue;
+        movio = true;
+        // Se reparte el empujón entre los dos, salvo que uno esté fijo.
+        const fa = a.fijo ? 0 : b.fijo ? 1 : 0.5;
+        const fb = 1 - fa;
+        if (py < px) {
+          const s = a.y <= b.y ? -1 : 1;
+          a.y += s * (py + 2) * fa;
+          b.y -= s * (py + 2) * fb;
+        } else {
+          const s = a.x <= b.x ? -1 : 1;
+          a.x += s * (px + 2) * fa;
+          b.x -= s * (px + 2) * fb;
+        }
+        acotar(a);
+        acotar(b);
+      }
+    }
+    if (!movio) break;
+  }
+}
+
+// acomodar corre la simulación entera de una y devuelve los nodos ya ubicados.
+//
+// Se resolvió así en vez de animar la convergencia: ver el grafo sacudirse
+// durante un par de segundos hasta encontrar su lugar no aporta nada y se ve
+// mal. Con las magnitudes de este prototipo el cálculo completo tarda menos que
+// un frame, así que el usuario ve el resultado directamente.
+// previas (opcional): posiciones de un layout anterior, { id -> {x, y, fijo} },
+// ya llevadas a este ancho/alto. Esos nodos arrancan donde estaban y quedan
+// anclados durante la simulación: así un activo nuevo se acomoda alrededor de
+// lo que ya se veía en vez de que el resto del grafo se reordene, y sobre todo
+// sin caer encima de un nodo que conservó su lugar.
+export type PosicionPrevia = { x: number; y: number; fijo?: boolean };
+
+export function acomodar(
+  nodos: GraphNode[], aristas: GraphEdge[], ancho: number, alto: number,
+  capas: string[] = [], previas: Map<string, PosicionPrevia> | null = null, maxTicks = 600,
+) {
+  let temp = posicionesIniciales(nodos, ancho, alto, capas);
+  for (const n of nodos) {
+    const vieja = previas?.get(n.id);
+    if (!vieja) continue;
+    n.x = vieja.x;
+    n.y = Math.max(n.bandTop ?? 0, Math.min(n.bandBot ?? alto, vieja.y));
+    n.fijo = vieja.fijo;
+    n.anclado = true;
+  }
+  for (let i = 0; i < maxTicks && !estaQuieto(temp); i++) {
+    temp = tick(nodos, aristas, temp, ancho, alto);
+  }
+  separar(nodos, ancho, alto);
+  for (const n of nodos) delete n.anclado;
+  return nodos;
+}

@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/* Dashboard PFI — claro. Blanco y celeste: el contexto de uso es una oficina de
+   clínica con luz de día, mostrando la pantalla a una dirección médica o a un
+   comité.
+
+   Estrategia de color contenida: los neutros tintan hacia el azul de marca y el
+   color saturado se reserva para tres cosas — identidad de cada institución,
+   acción primaria y estado (PERMIT / DENY / baja). Nada de color decorativo.
+
+   Contraste: todos los colores de texto pasan 4.5:1 sobre su fondo, incluidos
+   los "muted" de 11-12 px y los placeholders. El ámbar NUNCA va como texto
+   (2.2:1): solo relleno y acentos. */
+@import "tw-animate-css";
+@import "@fontsource-variable/sora";
+
+/* Tema oscuro Medámbar. Primario: ámbar #E6A817; su complementario, el azul
+   (~222°), va a la institución 1 y a lo informativo; el teal, al estado
+   favorable. Fondo negro con degradé hacia el ámbar y neutros tintados cálidos.
+   La barra superior es oscura, con "Med" en blanco y "ámbar" en dorado.
+
+   Contraste (medido): foreground 15.9:1 sobre --card, muted-foreground 7.1:1,
+   primary 8.8:1 y texto sobre primary 8.8:1; borde de controles 3.7:1
+   (WCAG 1.4.11). Con fondo oscuro el ámbar sí puede ir como texto. */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: dark;
+  --radius: 0.625rem;
+  --background: #0b0a07;          /* lienzo de la topología y superficies hundidas */
+  --foreground: #f3ede0;
+  --card: #15130e;
+  --card-foreground: #f3ede0;
+  --popover: #1e1b14;
+  --popover-foreground: #f3ede0;
+  --primary: #e6a817;             /* acción primaria, foco, selección */
+  --primary-foreground: #1a1200;
+  --secondary: #1e1b14;
+  --secondary-foreground: #f3ede0;
+  --muted: #1e1b14;               /* superficies embebidas: feed, filas de historial */
+  --muted-foreground: #ab9f86;
+  --accent: rgba(230, 168, 23, 0.14); /* hover / opción activa */
+  --accent-foreground: #f3ede0;
+  --destructive: #ff6b7a;
+  --border: #2f2a1f;
+  --input: #7a6f58;               /* borde de controles */
+  --ring: #e6a817;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Colores propios de Medámbar que shadcn no tiene: estados, barra y diagrama. */
+@theme {
+  --color-field: #0f0d09;         /* fondo de inputs y selects */
+  --color-amber: #e6a817;
+  --color-amber-tint: rgba(230, 168, 23, 0.10);
+  --color-line: #6e6450;          /* trazos del diagrama */
+  --color-activo: #7d8aa0;        /* nodo "activo" del grafo */
+  --color-org1: #8fb0ff;          /* Clínica Genérica 1 (azul, complementario del ámbar) */
+  --color-org2: #4fd1b5;          /* Clínica Genérica 2 */
+  --color-permit: #4fd1b5;
+  --color-permit-bg: rgba(79, 209, 181, 0.16);
+  --color-teal-tint: rgba(79, 209, 181, 0.10);
+  --color-deny-ink: #ff6b7a;
+  --color-deny-bg: rgba(255, 107, 122, 0.16);
+  --color-deny-tint: rgba(255, 107, 122, 0.12);
+  --color-warn-ink: #f0b84a;
+  --color-warn-bg: rgba(240, 184, 74, 0.16);
+  /* Barra superior oscura: "Med" blanco + "ámbar" en el ámbar de marca, borde
+     ámbar al pie. */
+  --color-bar-from: #1a1710;
+  --color-bar-to: #0f0d09;
+  --color-bar-ink: #ffffff;       /* "Med" y solapa activa: 18:1 */
+  --color-bar-muted: #c9bfa8;     /* solapas en reposo: 10:1 sobre la barra */
+  --color-brand-text: #e6a817;    /* "ámbar" del wordmark: 8.4:1 */
+
+  --shadow-bar: 0 2px 12px rgba(0, 0, 0, 0.45);
+
+  --font-head: 'Sora Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-body: Calibri, 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, monospace;
+}
+
+@layer base {
+  * { border-color: var(--border); outline-color: color-mix(in oklab, var(--ring) 50%, transparent); }
+  body {
+    min-height: 100vh;
+    background: #000 linear-gradient(165deg, #000 0%, #070604 38%, #2a1e04 72%, #5e440c 100%) fixed;
+    color: var(--foreground);
+    font: 14px/1.5 var(--font-body);
+  }
+  h1, h2, h3 { font-family: var(--font-head); letter-spacing: -0.01em; }
+  code { font-family: var(--font-mono); font-size: 12px; }
+  ::placeholder { color: var(--muted-foreground); opacity: 1; }
+
+  /* Superficies que dibuja el navegador: selección, cursor y scrollbars toman
+     la paleta en vez del azul y el gris del sistema. */
+  ::selection { background: rgba(230, 168, 23, 0.35); color: var(--foreground); }
+  html { scrollbar-color: var(--input) transparent; }
+  input, textarea { caret-color: var(--primary); }
+
+  /* shadcn ya dibuja su anillo de foco en botones e inputs; acá solo lo que
+     no es un componente suyo. */
+  :where(summary):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
